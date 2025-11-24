@@ -1,0 +1,48 @@
+# Arduino build files
+*.hex
+*.eep
+*.elf
+*.map
+
+# IDE files
+.vscode/
+.idea/
+.claude/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Credentials - DO NOT COMMIT
+config.h
+secrets.h
+config.py
+
+# Development notes and planning
+dev/
+apitest/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# MicroPython/CircuitPython
+.picowgo
+
+# Logs
+*.log
+
+# Firmware builds (prebuilt firmware is in firmware/ directory)
+*.uf2
+firmware/*.uf2
+
+# Library files (should be installed via mip on device)
+interstate75.py
+pimoroni.py
+
+# Upload script cache
+.upload_cache.json
