@@ -4,8 +4,8 @@
 import urequests
 import time
 
-# GitHub Configuration - Fixed URL
-GITHUB_RAW_BASE = "https://raw.githubusercontent.com/sammcanany/ChicagoTransitBoard/main"
+# GitHub Configuration - Using refs/heads/main to avoid CDN caching issues
+GITHUB_RAW_BASE = "https://raw.githubusercontent.com/sammcanany/ChicagoTransitBoard/refs/heads/main"
 
 # Files to update
 UPDATE_FILES = [
