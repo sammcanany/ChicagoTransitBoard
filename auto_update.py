@@ -4,8 +4,11 @@
 import urequests
 import time
 
-# GitHub Configuration - Raw content URL
-GITHUB_RAW_BASE = "https://raw.githubusercontent.com/sammcanany/ChicagoTransitBoard/main"
+# GitHub Configuration - Two URL patterns to check (CDN caching varies)
+GITHUB_RAW_URLS = [
+    "https://raw.githubusercontent.com/sammcanany/ChicagoTransitBoard/main",
+    "https://raw.githubusercontent.com/sammcanany/ChicagoTransitBoard/refs/heads/main"
+]
 
 # Files to update
 UPDATE_FILES = [
@@ -22,17 +25,14 @@ PROTECTED_FILES = [
     "config.py"  # User's configuration - never overwrite
 ]
 
-def get_github_raw_url(filename, cache_bust=False):
-    """Get the raw GitHub URL for a file.
-    
-    Args:
-        filename: File to download
-        cache_bust: If True, add timestamp to bypass CDN cache
-    """
-    url = f"{GITHUB_RAW_BASE}/{filename}"
-    if cache_bust:
-        # Add timestamp to bypass GitHub CDN cache
-        url += f"?t={int(time.time())}"
+# Track which URL base worked best for downloads
+_working_url_base = None
+
+def get_github_raw_url(filename):
+    """Get the raw GitHub URL for a file."""
+    global _working_url_base
+    base = _working_url_base or GITHUB_RAW_URLS[0]
+    return f"{base}/{filename}"
     return url
 
 def get_local_version():
@@ -64,18 +64,38 @@ def is_newer_version(remote, local):
     return remote_tuple > local_tuple
 
 def get_remote_version():
-    """Fetch version from GitHub (with cache busting)"""
-    try:
-        url = get_github_raw_url("version.txt", cache_bust=True)
-        response = urequests.get(url, timeout=10)
-        if response.status_code == 200:
-            version = response.text.strip()
-            response.close()
-            return version
-        response.close()
-    except Exception as e:
-        print(f"Error fetching remote version: {e}")
-    return None
+    """Fetch version from GitHub, checking both URL patterns.
+    Returns the newest version found across all URLs."""
+    global _working_url_base
+    
+    best_version = None
+    best_version_tuple = (0, 0, 0)
+    best_url_base = None
+    
+    for url_base in GITHUB_RAW_URLS:
+        try:
+            url = f"{url_base}/version.txt"
+            response = urequests.get(url, timeout=10)
+            if response.status_code == 200:
+                version = response.text.strip()
+                version_tuple = parse_version(version)
+                response.close()
+                
+                # Keep the newest version found
+                if version_tuple > best_version_tuple:
+                    best_version = version
+                    best_version_tuple = version_tuple
+                    best_url_base = url_base
+            else:
+                response.close()
+        except Exception as e:
+            print(f"Error fetching from {url_base}: {e}")
+    
+    # Remember which URL had the newest version for downloads
+    if best_url_base:
+        _working_url_base = best_url_base
+    
+    return best_version
 
 def download_file(filename, temp=False):
     """Download a file from GitHub
