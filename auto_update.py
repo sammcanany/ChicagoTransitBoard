@@ -4,8 +4,8 @@
 import urequests
 import time
 
-# GitHub Configuration - Using refs/heads/main to avoid CDN caching issues
-GITHUB_RAW_BASE = "https://raw.githubusercontent.com/sammcanany/ChicagoTransitBoard/refs/heads/main"
+# GitHub Configuration - Raw content URL
+GITHUB_RAW_BASE = "https://raw.githubusercontent.com/sammcanany/ChicagoTransitBoard/main"
 
 # Files to update
 UPDATE_FILES = [
@@ -22,9 +22,18 @@ PROTECTED_FILES = [
     "config.py"  # User's configuration - never overwrite
 ]
 
-def get_github_raw_url(filename):
-    """Get the raw GitHub URL for a file"""
-    return f"{GITHUB_RAW_BASE}/{filename}"
+def get_github_raw_url(filename, cache_bust=False):
+    """Get the raw GitHub URL for a file.
+    
+    Args:
+        filename: File to download
+        cache_bust: If True, add timestamp to bypass CDN cache
+    """
+    url = f"{GITHUB_RAW_BASE}/{filename}"
+    if cache_bust:
+        # Add timestamp to bypass GitHub CDN cache
+        url += f"?t={int(time.time())}"
+    return url
 
 def get_local_version():
     """Read local version from version.txt"""
@@ -55,9 +64,9 @@ def is_newer_version(remote, local):
     return remote_tuple > local_tuple
 
 def get_remote_version():
-    """Fetch version from GitHub"""
+    """Fetch version from GitHub (with cache busting)"""
     try:
-        url = get_github_raw_url("version.txt")
+        url = get_github_raw_url("version.txt", cache_bust=True)
         response = urequests.get(url, timeout=10)
         if response.status_code == 200:
             version = response.text.strip()
