@@ -5,58 +5,53 @@
 import time
 import network
 import os
-from machine import WDT, Pin
+from machine import WDT
 from interstate75 import Interstate75, DISPLAY_INTERSTATE75_128X64
 
-# ===== STATUS LED =====
-# Try to use onboard LED - different boards use different pins
-# Pico W / RP2350 uses "LED" string, fallback to common GPIO pins
-status_led = None
-try:
-    # Try Pico W style LED first (works on RP2350 W variants)
-    status_led = Pin("LED", Pin.OUT)
-except:
-    try:
-        # Fallback to GPIO 25 (standard Pico LED)
-        status_led = Pin(25, Pin.OUT)
-    except:
-        print("Warning: Could not initialize status LED")
+# ===== INITIALIZE DISPLAY FIRST (needed for LED) =====
+# Interstate 75 W with 2x 64x32 panels = 128x64 display
+i75 = Interstate75(display=DISPLAY_INTERSTATE75_128X64)
+display = i75.display
 
-def led_on():
-    """Turn status LED on"""
-    if status_led:
-        status_led.value(1)
+# ===== STATUS LED =====
+# Interstate 75 has an onboard RGB LED accessed via i75.set_led(r, g, b)
+def led_on(r=50, g=50, b=50):
+    """Turn status LED on (white by default)"""
+    try:
+        i75.set_led(r, g, b)
+    except:
+        pass
 
 def led_off():
     """Turn status LED off"""
-    if status_led:
-        status_led.value(0)
+    try:
+        i75.set_led(0, 0, 0)
+    except:
+        pass
 
-def led_blink(times=1, on_ms=100, off_ms=100):
+def led_blink(times=1, on_ms=100, off_ms=100, r=50, g=50, b=50):
     """Blink the status LED a specified number of times"""
-    if not status_led:
-        return
     for _ in range(times):
-        led_on()
+        led_on(r, g, b)
         time.sleep_ms(on_ms)
         led_off()
         time.sleep_ms(off_ms)
 
 def led_pattern_wifi_connecting():
-    """Fast blink pattern while connecting to WiFi"""
-    led_blink(3, 100, 100)
+    """Blue blink pattern while connecting to WiFi"""
+    led_blink(3, 100, 100, r=0, g=0, b=100)
 
 def led_pattern_updating():
-    """Slow pulse pattern while updating"""
-    led_blink(2, 500, 200)
+    """Yellow pulse pattern while updating"""
+    led_blink(2, 500, 200, r=100, g=100, b=0)
 
 def led_pattern_error():
-    """Rapid blink pattern for errors"""
-    led_blink(5, 50, 50)
+    """Red rapid blink pattern for errors"""
+    led_blink(5, 50, 50, r=100, g=0, b=0)
 
 def led_pattern_success():
-    """Single long blink for success"""
-    led_on()
+    """Green long blink for success"""
+    led_on(r=0, g=100, b=0)
     time.sleep_ms(1000)
     led_off()
 
@@ -188,11 +183,7 @@ COLOR_YELLOW = None
 COLOR_RED = None
 COLOR_BLACK = None
 
-# ===== INITIALIZE DISPLAY =====
-# Interstate 75 W with 2x 64x32 panels = 128x64 display
-i75 = Interstate75(display=DISPLAY_INTERSTATE75_128X64)
-display = i75.display
-
+# ===== DISPLAY ALREADY INITIALIZED ABOVE (for LED access) =====
 # Global mDNS server instance
 mdns_server = None
 mdns_client = None
@@ -1845,7 +1836,7 @@ async def main_loop():
                 if not check_wifi_and_reconnect():
                     # WiFi is down and couldn't reconnect
                     # Continue loop but skip network operations
-                    led_blink(1, 200, 0)  # Single quick blink to indicate offline
+                    led_blink(1, 200, 100, r=100, g=0, b=0)  # Red blink to indicate offline
                     continue
 
             # Handle config portal web requests (non-blocking)
