@@ -12,7 +12,7 @@ No config file editing required. The board creates its own WiFi network for setu
 4. Configure via web browser
 5. Done!
 
-**[See detailed Web Setup instructions →](#method-1-web-setup-portal-new)**
+**[See detailed Web Setup instructions →](#method-1-web-setup-portal)**
 
 ### Method 2: Manual Config File
 
@@ -234,37 +234,7 @@ Your board is now:
 3. Bottom-right corner: Select **"Raspberry Pi Pico"**
 4. You should see `>>>` prompt in the Shell window
 
-## Step 4: Test Display Hardware
-
-1. In Thonny, open `test_display.py` from this project
-2. Click **File → Save As → Raspberry Pi Pico**
-3. Save as `test_display.py`
-4. Click the green **Run** button (▶)
-5. You should see:
-   - Green screen fill
-   - "RAVENSWOOD" text
-   - Scrolling message
-   - "Press BOOT to continue" (press the button)
-
-**If display doesn't work**: Check HUB75 cable, power connections, and panel scan rate
-
-## Step 5: Configure WiFi
-
-1. Open `test_wifi.py` in Thonny
-
-2. Edit these lines:
-   ```python
-   WIFI_SSID = "Your_Network_Name"
-   WIFI_PASSWORD = "Your_Password"
-   ```
-
-3. Save to Pico as `test_wifi.py`
-4. Run it
-5. You should see "WiFi: Connected!" and your IP address
-
-**If WiFi fails**: Verify SSID/password, check 2.4GHz network (not 5GHz)
-
-## Step 6: Create Configuration File
+## Step 4: Create Configuration File
 
 1. Open `config.example.py` in Thonny
 
@@ -333,23 +303,20 @@ Your board is now:
    - **File → Save As → Raspberry Pi Pico**
    - Name it exactly: `config.py`
 
-## Step 7: Upload All Files
+## Step 5: Upload All Files
 
 Upload these files to the Pico (File → Save As → Raspberry Pi Pico):
 
 **Required files:**
 - `main.py` - Main application
-- `config.py` - Your configuration (created in Step 6)
-- `setup_portal.py` - WiFi setup portal (if config.py missing)
-- `config_portal.py` - Configuration web portal (for http://board.local)
+- `config.py` - Your configuration (created in Step 4)
+- `setup_portal.py` - WiFi setup portal
+- `config_portal.py` - Configuration web portal
+- `config_portal_template.html` - Web UI template
 - `auto_update.py` - Auto-update system
 - `version.txt` - Version tracking
 
-**Test files (optional):**
-- `test_display.py` - Display hardware test
-- `test_wifi.py` - WiFi connectivity test
-
-## Step 8: Run and Enjoy!
+## Step 6: Run and Enjoy!
 
 1. In Thonny, open `main.py`
 2. Click **Run** (▶)

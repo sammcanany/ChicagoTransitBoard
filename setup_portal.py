@@ -503,7 +503,7 @@ ENABLE_ALERT_ICONS = True
         return False
 
 def run_server():
-    """Run the web server"""
+    """Run the web server with captive portal support"""
     ap = create_ap()
     
     # Scan for networks once at startup
@@ -517,7 +517,20 @@ def run_server():
     s.bind(addr)
     s.listen(1)
     
-    print("Web server running...")
+    print("Web server running (captive portal enabled)...")
+    
+    # Common captive portal detection URLs that should redirect
+    CAPTIVE_URLS = [
+        '/generate_204',        # Android
+        '/gen_204',             # Android
+        '/hotspot-detect.html', # Apple iOS/macOS
+        '/library/test/success.html',  # Apple
+        '/ncsi.txt',            # Windows
+        '/connecttest.txt',     # Windows
+        '/redirect',            # Windows
+        '/success.txt',         # Various
+        '/canonical.html',      # Firefox
+    ]
     
     while True:
         try:
@@ -563,7 +576,22 @@ def run_server():
                 method_line = lines[0]
                 print(f"Request: {method_line}")
                 
-                if 'GET / ' in method_line or 'GET /setup' in method_line:
+                # Extract the path from the request
+                parts = method_line.split(' ')
+                path = parts[1] if len(parts) > 1 else '/'
+                
+                # Check if this is a captive portal detection request
+                is_captive_check = any(url in path for url in CAPTIVE_URLS)
+                
+                if is_captive_check:
+                    # Redirect to setup page - this triggers the captive portal popup
+                    print(f"Captive portal check detected: {path}")
+                    cl.send('HTTP/1.1 302 Found\r\n')
+                    cl.send('Location: http://192.168.4.1/\r\n')
+                    cl.send('Cache-Control: no-cache\r\n')
+                    cl.send('Connection: close\r\n\r\n')
+                
+                elif 'GET / ' in method_line or 'GET /setup' in method_line:
                     # Rescan networks on page load
                     networks = scan_networks()
                     response = html_page(networks=networks)
@@ -609,9 +637,16 @@ def run_server():
                         cl.sendall(response)
                 
                 else:
-                    # 404
-                    cl.send('HTTP/1.1 404 Not Found\r\n')
-                    cl.send('Connection: close\r\n\r\n')
+                    # Redirect any unknown request to setup page (captive portal catch-all)
+                    if 'GET' in method_line:
+                        print(f"Unknown GET, redirecting to setup: {path}")
+                        cl.send('HTTP/1.1 302 Found\r\n')
+                        cl.send('Location: http://192.168.4.1/\r\n')
+                        cl.send('Connection: close\r\n\r\n')
+                    else:
+                        # 404 for non-GET
+                        cl.send('HTTP/1.1 404 Not Found\r\n')
+                        cl.send('Connection: close\r\n\r\n')
             
             cl.close()
             
