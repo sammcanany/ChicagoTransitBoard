@@ -1467,6 +1467,9 @@
             // Initialize rotation mode visibility
             toggleRotationMode();
 
+            // Load current values into dropdowns
+            loadCurrentValues();
+
             // Hide all pages except main
             const allPages = document.querySelectorAll('.page');
             allPages.forEach(page => {
@@ -1487,6 +1490,53 @@
                 lucide.createIcons();
             }
         });
+
+        // Load current config values into dropdowns
+        function loadCurrentValues() {
+            // Get stored values from hidden fields
+            var lineId = document.getElementById('line_id').value;
+            var lineName = document.getElementById('line_name').value;
+            var stationId = document.getElementById('primary_station_id').value;
+            var stationName = document.getElementById('primary_station_name').value;
+
+            // Set primary line dropdown
+            if (lineId && lineName) {
+                var lineSelect = document.getElementById('line_select');
+                var lineValue = lineId + '|' + lineName;
+                for (var i = 0; i < lineSelect.options.length; i++) {
+                    if (lineSelect.options[i].value === lineValue || lineSelect.options[i].value.startsWith(lineId + '|')) {
+                        lineSelect.selectedIndex = i;
+                        break;
+                    }
+                }
+            }
+
+            // Set primary station dropdown
+            if (stationId && stationName) {
+                var stationSelect = document.getElementById('primary_station_select');
+                var stationValue = stationId + '|' + stationName;
+                for (var i = 0; i < stationSelect.options.length; i++) {
+                    if (stationSelect.options[i].value === stationValue || stationSelect.options[i].value.startsWith(stationId + '|')) {
+                        stationSelect.selectedIndex = i;
+                        break;
+                    }
+                }
+            }
+
+            // Secondary line
+            var secondaryLineId = document.getElementById('secondary_line_id').value;
+            var secondaryLineName = document.getElementById('secondary_line_name').value;
+            if (secondaryLineId && secondaryLineName) {
+                var secondaryLineSelect = document.getElementById('secondary_line_select');
+                var secondaryLineValue = secondaryLineId + '|' + secondaryLineName;
+                for (var i = 0; i < secondaryLineSelect.options.length; i++) {
+                    if (secondaryLineSelect.options[i].value === secondaryLineValue || secondaryLineSelect.options[i].value.startsWith(secondaryLineId + '|')) {
+                        secondaryLineSelect.selectedIndex = i;
+                        break;
+                    }
+                }
+            }
+        }
     </script>
 </body>
 </html>

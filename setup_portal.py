@@ -5,10 +5,49 @@ import network
 import socket
 import time
 import machine
+import select
 
 # AP Configuration
 AP_SSID = "ChicagoTransitBoard"
 AP_PASSWORD = "setup1234"  # Change this for security
+AP_IP = "192.168.4.1"
+
+# Pre-build IP bytes for DNS responses
+IP_BYTES = bytes([int(x) for x in AP_IP.split('.')])
+
+def handle_dns_query(dns_socket):
+    """Handle a single DNS query - returns our IP for all queries (captive portal)"""
+    try:
+        data, addr = dns_socket.recvfrom(512)
+        
+        # Build DNS response - return our IP for any query
+        response = bytearray()
+        response.extend(data[:2])  # Transaction ID
+        response.extend([0x81, 0x80])  # Flags: standard response, no error
+        response.extend(data[4:6])  # Questions count
+        response.extend(data[4:6])  # Answers count (same as questions)
+        response.extend([0x00, 0x00])  # Authority RRs
+        response.extend([0x00, 0x00])  # Additional RRs
+        
+        # Copy the question section
+        pos = 12
+        while pos < len(data) and data[pos] != 0:
+            pos += data[pos] + 1
+        pos += 5
+        response.extend(data[12:pos])
+        
+        # Add answer section
+        response.extend([0xc0, 0x0c])  # Pointer to domain name
+        response.extend([0x00, 0x01])  # Type: A
+        response.extend([0x00, 0x01])  # Class: IN
+        response.extend([0x00, 0x00, 0x00, 0x3c])  # TTL: 60s
+        response.extend([0x00, 0x04])  # Data length: 4
+        response.extend(IP_BYTES)
+        
+        dns_socket.sendto(bytes(response), addr)
+        print(f"DNS: {addr[0]} -> {AP_IP}")
+    except Exception as e:
+        print(f"DNS error: {e}")
 
 def create_ap():
     """Create Access Point for setup"""
@@ -506,16 +545,23 @@ def run_server():
     """Run the web server with captive portal support"""
     ap = create_ap()
     
+    # Create DNS socket (UDP port 53) for captive portal
+    dns_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    dns_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    dns_socket.setblocking(False)
+    dns_socket.bind(('0.0.0.0', 53))
+    print("DNS server running on port 53...")
+    
     # Scan for networks once at startup
     print("\nScanning for available networks...")
     available_networks = scan_networks()
     
-    # Create socket
-    addr = socket.getaddrinfo('0.0.0.0', 80)[0][-1]
-    s = socket.socket()
-    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    s.bind(addr)
-    s.listen(1)
+    # Create HTTP socket (TCP port 80)
+    http_socket = socket.socket()
+    http_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    http_socket.setblocking(False)
+    http_socket.bind(('0.0.0.0', 80))
+    http_socket.listen(1)
     
     print("Web server running (captive portal enabled)...")
     
@@ -532,130 +578,155 @@ def run_server():
         '/canonical.html',      # Firefox
     ]
     
+    # Use select/poll for non-blocking I/O
+    poller = select.poll()
+    poller.register(dns_socket, select.POLLIN)
+    poller.register(http_socket, select.POLLIN)
+    
     while True:
         try:
-            cl, addr = s.accept()
-            print(f'\nClient connected from {addr}')
+            # Wait for activity on either socket (100ms timeout)
+            events = poller.poll(100)
+            
+            for sock, event in events:
+                # Handle DNS query (MicroPython returns the socket object directly)
+                if sock == dns_socket:
+                    handle_dns_query(dns_socket)
+                
+                # Handle HTTP connection
+                elif sock == http_socket:
+                    try:
+                        cl, addr = http_socket.accept()
+                        print(f'\nClient connected from {addr}')
+                        handle_http_client(cl, addr, CAPTIVE_URLS)
+                    except OSError:
+                        pass
+                        
+        except Exception as e:
+            print(f"Server error: {e}")
+            time.sleep(0.1)
 
-            # Read headers first
-            cl.settimeout(5.0)
-            request = b''
-            while b'\r\n\r\n' not in request:
+def handle_http_client(cl, addr, CAPTIVE_URLS):
+    """Handle a single HTTP client connection"""
+    try:
+        # Read headers first
+        cl.settimeout(5.0)
+        request = b''
+        while b'\r\n\r\n' not in request:
+            chunk = cl.recv(1024)
+            if not chunk:
+                break
+            request += chunk
+
+        # Check for Content-Length and read body if present
+        headers_end = request.find(b'\r\n\r\n')
+        if headers_end > 0:
+            headers = request[:headers_end].decode('utf-8')
+            body_start = request[headers_end + 4:]
+
+            # Find Content-Length
+            content_length = 0
+            for line in headers.split('\r\n'):
+                if line.lower().startswith('content-length:'):
+                    content_length = int(line.split(':')[1].strip())
+                    break
+
+            # Read remaining body if needed
+            while len(body_start) < content_length:
                 chunk = cl.recv(1024)
                 if not chunk:
                     break
-                request += chunk
+                body_start += chunk
 
-            # Check for Content-Length and read body if present
-            headers_end = request.find(b'\r\n\r\n')
-            if headers_end > 0:
-                headers = request[:headers_end].decode('utf-8')
-                body_start = request[headers_end + 4:]
+            request = (request[:headers_end + 4] + body_start)
 
-                # Find Content-Length
-                content_length = 0
-                for line in headers.split('\r\n'):
-                    if line.lower().startswith('content-length:'):
-                        content_length = int(line.split(':')[1].strip())
-                        break
-
-                # Read remaining body if needed
-                while len(body_start) < content_length:
-                    chunk = cl.recv(1024)
-                    if not chunk:
-                        break
-                    body_start += chunk
-
-                request = (request[:headers_end + 4] + body_start)
-
-            request = request.decode('utf-8')
+        request = request.decode('utf-8')
+        
+        # Parse request
+        lines = request.split('\r\n')
+        if len(lines) > 0:
+            method_line = lines[0]
+            print(f"Request: {method_line}")
             
-            # Parse request
-            lines = request.split('\r\n')
-            if len(lines) > 0:
-                method_line = lines[0]
-                print(f"Request: {method_line}")
+            # Extract the path from the request
+            parts = method_line.split(' ')
+            path = parts[1] if len(parts) > 1 else '/'
+            
+            # Check if this is a captive portal detection request
+            is_captive_check = any(url in path for url in CAPTIVE_URLS)
+            
+            if is_captive_check:
+                # For captive portal to trigger, we need to NOT return the expected response
+                print(f"Captive portal check detected: {path}")
                 
-                # Extract the path from the request
-                parts = method_line.split(' ')
-                path = parts[1] if len(parts) > 1 else '/'
+                # Return a 302 redirect - this triggers captive portal popup
+                cl.send('HTTP/1.1 302 Found\r\n')
+                cl.send('Location: http://192.168.4.1/\r\n')
+                cl.send('Cache-Control: no-cache, no-store, must-revalidate\r\n')
+                cl.send('Connection: close\r\n\r\n')
+            
+            elif 'GET / ' in method_line or 'GET /setup' in method_line:
+                # Rescan networks on page load
+                networks = scan_networks()
+                response = html_page(networks=networks)
+                cl.send('HTTP/1.1 200 OK\r\n')
+                cl.send('Content-Type: text/html\r\n')
+                cl.send('Connection: close\r\n\r\n')
+                cl.sendall(response)
+            
+            elif 'POST /save' in method_line:
+                # Extract form data
+                body = request.split('\r\n\r\n', 1)[1] if '\r\n\r\n' in request else ''
+                print(f"Form body: {body}")
+                params = parse_form_data(body)
+                print(f"Parsed params: {params}")
+
+                ssid = params.get('ssid', '')
+                if ssid == '__manual__':
+                    ssid = params.get('ssid_manual', 'N/A')
+                password = params.get('password', '')
+                print(f"Received WiFi config: SSID={ssid}, Password={'*' * len(password)}")
                 
-                # Check if this is a captive portal detection request
-                is_captive_check = any(url in path for url in CAPTIVE_URLS)
-                
-                if is_captive_check:
-                    # Redirect to setup page - this triggers the captive portal popup
-                    print(f"Captive portal check detected: {path}")
-                    cl.send('HTTP/1.1 302 Found\r\n')
-                    cl.send('Location: http://192.168.4.1/\r\n')
-                    cl.send('Cache-Control: no-cache\r\n')
-                    cl.send('Connection: close\r\n\r\n')
-                
-                elif 'GET / ' in method_line or 'GET /setup' in method_line:
-                    # Rescan networks on page load
-                    networks = scan_networks()
-                    response = html_page(networks=networks)
+                # Save configuration
+                if save_config(params):
+                    response = success_page()
                     cl.send('HTTP/1.1 200 OK\r\n')
                     cl.send('Content-Type: text/html\r\n')
                     cl.send('Connection: close\r\n\r\n')
                     cl.sendall(response)
-                
-                elif 'POST /save' in method_line:
-                    # Extract form data
-                    body = request.split('\r\n\r\n', 1)[1] if '\r\n\r\n' in request else ''
-                    print(f"Form body: {body}")  # Debug
-                    params = parse_form_data(body)
-                    print(f"Parsed params: {params}")  # Debug
-
-                    ssid = params.get('ssid', '')
-                    if ssid == '__manual__':
-                        ssid = params.get('ssid_manual', 'N/A')
-                    password = params.get('password', '')
-                    print(f"Received WiFi config: SSID={ssid}, Password={'*' * len(password)}")
+                    cl.close()
                     
-                    # Save configuration
-                    if save_config(params):
-                        response = success_page()
-                        cl.send('HTTP/1.1 200 OK\r\n')
-                        cl.send('Content-Type: text/html\r\n')
-                        cl.send('Connection: close\r\n\r\n')
-                        cl.sendall(response)
-                        cl.close()
-                        
-                        print("\n⏳ Restarting in 5 seconds...")
-                        time.sleep(5)
-                        
-                        # Shutdown AP and restart
-                        ap.active(False)
-                        s.close()
-                        machine.reset()
-                    else:
-                        response = html_page(error="Failed to save WiFi configuration. Please try again.", networks=available_networks)
-                        cl.send('HTTP/1.1 500 Internal Server Error\r\n')
-                        cl.send('Content-Type: text/html\r\n')
-                        cl.send('Connection: close\r\n\r\n')
-                        cl.sendall(response)
-                
+                    print("\n⏳ Restarting in 5 seconds...")
+                    time.sleep(5)
+                    machine.reset()
                 else:
-                    # Redirect any unknown request to setup page (captive portal catch-all)
-                    if 'GET' in method_line:
-                        print(f"Unknown GET, redirecting to setup: {path}")
-                        cl.send('HTTP/1.1 302 Found\r\n')
-                        cl.send('Location: http://192.168.4.1/\r\n')
-                        cl.send('Connection: close\r\n\r\n')
-                    else:
-                        # 404 for non-GET
-                        cl.send('HTTP/1.1 404 Not Found\r\n')
-                        cl.send('Connection: close\r\n\r\n')
+                    networks = scan_networks()
+                    response = html_page(error="Failed to save WiFi configuration. Please try again.", networks=networks)
+                    cl.send('HTTP/1.1 500 Internal Server Error\r\n')
+                    cl.send('Content-Type: text/html\r\n')
+                    cl.send('Connection: close\r\n\r\n')
+                    cl.sendall(response)
             
+            else:
+                # Redirect any unknown request to setup page (captive portal catch-all)
+                if 'GET' in method_line:
+                    print(f"Unknown GET, redirecting to setup: {path}")
+                    cl.send('HTTP/1.1 302 Found\r\n')
+                    cl.send('Location: http://192.168.4.1/\r\n')
+                    cl.send('Connection: close\r\n\r\n')
+                else:
+                    # 404 for non-GET
+                    cl.send('HTTP/1.1 404 Not Found\r\n')
+                    cl.send('Connection: close\r\n\r\n')
+        
+        cl.close()
+        
+    except Exception as e:
+        print(f"Error handling request: {e}")
+        try:
             cl.close()
-            
-        except Exception as e:
-            print(f"Error handling request: {e}")
-            try:
-                cl.close()
-            except:
-                pass
+        except:
+            pass
 
 if __name__ == "__main__":
     print("Starting setup portal...")

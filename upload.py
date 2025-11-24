@@ -197,6 +197,9 @@ def upload_file(ser, local_path, remote_path=None):
         return False
 
 def main():
+    # Parse command line args
+    no_monitor = '--no-monitor' in sys.argv or '-n' in sys.argv
+    
     print("MicroPython File Uploader (Sync Mode)")
     print("=" * 50)
 
@@ -294,12 +297,18 @@ def main():
             print("\nBoard output:")
             print(output)
 
+        if no_monitor:
+            print("\nSkipping serial monitor (--no-monitor)")
+            ser.close()
+            return
+
         # Enter serial monitor mode
         print("\n" + "=" * 50)
         print("Serial Monitor (Press Ctrl+C to exit)")
         print("=" * 50)
 
         try:
+            ser.timeout = 0.1  # Non-blocking read
             while True:
                 # Check for data from board
                 if ser.in_waiting > 0:
@@ -308,12 +317,18 @@ def main():
                 time.sleep(0.1)
         except KeyboardInterrupt:
             print("\n\nExiting serial monitor...")
-
-        ser.close()
+        finally:
+            ser.close()
+            print("Serial port closed.")
 
     except serial.SerialException as e:
         print(f"\nError: Could not connect to {port}")
         print(f"Details: {e}")
+        sys.exit(1)
+    except Exception as e:
+        print(f"\nUnexpected error: {e}")
+        if 'ser' in locals() and ser.is_open:
+            ser.close()
         sys.exit(1)
 
 if __name__ == "__main__":
