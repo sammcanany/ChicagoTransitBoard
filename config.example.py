@@ -131,6 +131,13 @@ WEATHER_DISPLAY_MODE = "icon_only"        # "icon_only" or "icon_and_temp"
 # Get OpenWeatherMap API key from: https://openweathermap.org/api
 
 # ========================================
+# Status LED
+# ========================================
+ENABLE_STATUS_LED = True  # Show status on onboard RGB LED
+# Green = connected and running, Red = error, Blue = connecting
+# Set to False if the light is distracting
+
+# ========================================
 # Power Management
 # ========================================
 

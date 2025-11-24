@@ -15,8 +15,19 @@ display = i75.display
 
 # ===== STATUS LED =====
 # Interstate 75 has an onboard RGB LED accessed via i75.set_led(r, g, b)
+# Controlled by ENABLE_STATUS_LED config option
+
+def _led_enabled():
+    """Check if status LED is enabled in config"""
+    try:
+        return ENABLE_STATUS_LED
+    except NameError:
+        return True  # Default to enabled if config not loaded yet
+
 def led_on(r=50, g=50, b=50):
     """Turn status LED on (white by default)"""
+    if not _led_enabled():
+        return
     try:
         i75.set_led(r, g, b)
     except:
@@ -28,6 +39,23 @@ def led_off():
         i75.set_led(0, 0, 0)
     except:
         pass
+
+def led_connected():
+    """Set LED to dim green to indicate WiFi connected and running"""
+    led_on(r=0, g=20, b=0)
+
+def led_set_status(status):
+    """Set LED to indicate current status.
+    
+    Args:
+        status: 'connected' (dim green), 'error' (dim red), 'off'
+    """
+    if status == 'connected':
+        led_connected()
+    elif status == 'error':
+        led_on(r=20, g=0, b=0)  # Dim red - error state
+    else:
+        led_off()
 
 def led_blink(times=1, on_ms=100, off_ms=100, r=50, g=50, b=50):
     """Blink the status LED a specified number of times"""
@@ -50,10 +78,10 @@ def led_pattern_error():
     led_blink(5, 50, 50, r=100, g=0, b=0)
 
 def led_pattern_success():
-    """Green long blink for success"""
+    """Green long blink for success, then stay dim green"""
     led_on(r=0, g=100, b=0)
     time.sleep_ms(1000)
-    led_off()
+    led_set_status('connected')  # Stay dim green
 
 # Check if we need to run setup portal
 def needs_setup():
@@ -139,6 +167,12 @@ try:
         from config import ENABLE_ADAPTIVE_BRIGHTNESS
     except ImportError:
         ENABLE_ADAPTIVE_BRIGHTNESS = False
+    
+    # Status LED settings
+    try:
+        from config import ENABLE_STATUS_LED
+    except ImportError:
+        ENABLE_STATUS_LED = True  # Enabled by default
     
     # Station rotation settings (v1.4.0)
     try:
@@ -358,6 +392,7 @@ def connect_wifi(silent=False):
             display.text(ip, 5, 15, scale=1)
             i75.update()
             time.sleep(2)
+        led_connected()  # Keep LED green while running
         return True
 
 
@@ -381,7 +416,7 @@ def check_wifi_and_reconnect():
         print(f"Reconnection attempt {attempt + 1}/3...")
         if connect_wifi(silent=True):
             print("WiFi reconnected successfully!")
-            led_pattern_success()
+            led_connected()  # Keep LED green while running
             return True
         time.sleep(2)
     
