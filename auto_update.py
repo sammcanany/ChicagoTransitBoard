@@ -34,6 +34,26 @@ def get_local_version():
     except:
         return "0.0.0"
 
+def parse_version(version_str):
+    """Parse version string into tuple of integers for comparison.
+    Handles versions like '1.7.0', '1.7.1', '2.0.0', etc.
+    Returns (major, minor, patch) tuple."""
+    try:
+        parts = version_str.strip().split('.')
+        # Pad with zeros if needed (e.g., "1.7" becomes (1, 7, 0))
+        while len(parts) < 3:
+            parts.append('0')
+        return tuple(int(p) for p in parts[:3])
+    except:
+        return (0, 0, 0)
+
+def is_newer_version(remote, local):
+    """Check if remote version is newer than local version.
+    Returns True if remote > local."""
+    remote_tuple = parse_version(remote)
+    local_tuple = parse_version(local)
+    return remote_tuple > local_tuple
+
 def get_remote_version():
     """Fetch version from GitHub"""
     try:
@@ -93,7 +113,7 @@ def check_for_updates():
 
     print(f"Remote version: {remote_version}")
 
-    if remote_version != local_version:
+    if is_newer_version(remote_version, local_version):
         print(f"Update available: {local_version} -> {remote_version}")
         print("Downloading updates to temporary files...")
 
