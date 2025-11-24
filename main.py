@@ -5,8 +5,60 @@
 import time
 import network
 import os
-from machine import WDT
+from machine import WDT, Pin
 from interstate75 import Interstate75, DISPLAY_INTERSTATE75_128X64
+
+# ===== STATUS LED =====
+# Try to use onboard LED - different boards use different pins
+# Pico W / RP2350 uses "LED" string, fallback to common GPIO pins
+status_led = None
+try:
+    # Try Pico W style LED first (works on RP2350 W variants)
+    status_led = Pin("LED", Pin.OUT)
+except:
+    try:
+        # Fallback to GPIO 25 (standard Pico LED)
+        status_led = Pin(25, Pin.OUT)
+    except:
+        print("Warning: Could not initialize status LED")
+
+def led_on():
+    """Turn status LED on"""
+    if status_led:
+        status_led.value(1)
+
+def led_off():
+    """Turn status LED off"""
+    if status_led:
+        status_led.value(0)
+
+def led_blink(times=1, on_ms=100, off_ms=100):
+    """Blink the status LED a specified number of times"""
+    if not status_led:
+        return
+    for _ in range(times):
+        led_on()
+        time.sleep_ms(on_ms)
+        led_off()
+        time.sleep_ms(off_ms)
+
+def led_pattern_wifi_connecting():
+    """Fast blink pattern while connecting to WiFi"""
+    led_blink(3, 100, 100)
+
+def led_pattern_updating():
+    """Slow pulse pattern while updating"""
+    led_blink(2, 500, 200)
+
+def led_pattern_error():
+    """Rapid blink pattern for errors"""
+    led_blink(5, 50, 50)
+
+def led_pattern_success():
+    """Single long blink for success"""
+    led_on()
+    time.sleep_ms(1000)
+    led_off()
 
 # Check if we need to run setup portal
 def needs_setup():
@@ -189,8 +241,12 @@ def get_line_color(line_code):
     return LINE_COLORS.get(line_code, COLOR_METRA_GREEN)
 
 # ===== WIFI CONNECTION =====
-def connect_wifi():
-    """Connect to WiFi and show status on display. Returns True if successful."""
+def connect_wifi(silent=False):
+    """Connect to WiFi and show status on display. Returns True if successful.
+    
+    Args:
+        silent: If True, don't update display (for background reconnection)
+    """
     global wifi_connected
 
     wlan = network.WLAN(network.STA_IF)
@@ -199,14 +255,17 @@ def connect_wifi():
     # Set hostname BEFORE connecting (required for mDNS)
     try:
         network.hostname("board")
-        print("Hostname set to 'board' for mDNS")
+        if not silent:
+            print("Hostname set to 'board' for mDNS")
     except Exception as e:
-        print(f"Could not set hostname: {e}")
+        if not silent:
+            print(f"Could not set hostname: {e}")
 
     # Check if already connected
     if wlan.isconnected():
         wifi_connected = True
-        print(f"Already connected! IP: {wlan.ifconfig()[0]}")
+        if not silent:
+            print(f"Already connected! IP: {wlan.ifconfig()[0]}")
 
         # Sync time with NTP server
         try:
@@ -243,27 +302,31 @@ def connect_wifi():
     wlan.config(pm=0xa11140)  # Turn WiFi power saving off for some slow APs
     wlan.connect(WIFI_SSID, WIFI_PASSWORD)
     
-    # Show connecting message
-    display.set_pen(COLOR_BLACK)
-    display.clear()
-    display.set_pen(COLOR_WHITE)
-    display.text("Connecting WiFi...", 5, 5, scale=1)
-    i75.update()
+    # Show connecting message and LED pattern
+    if not silent:
+        display.set_pen(COLOR_BLACK)
+        display.clear()
+        display.set_pen(COLOR_WHITE)
+        display.text("Connecting WiFi...", 5, 5, scale=1)
+        i75.update()
     
     max_wait = 20
     while max_wait > 0:
+        led_pattern_wifi_connecting()  # Blink LED while connecting
         if wlan.status() < 0 or wlan.status() >= 3:
             break
         max_wait -= 1
-        time.sleep(1)
+        time.sleep(0.5)  # Reduced sleep to allow more LED blinks
     
     if wlan.status() != 3:
         wifi_connected = False
+        led_pattern_error()  # Error LED pattern
         print("WiFi connection failed")
         return False
     else:
         wifi_connected = True
         ip = wlan.ifconfig()[0]
+        led_pattern_success()  # Success LED pattern
         print(f'Connected! IP: {ip}')
 
         # Sync time with NTP server
@@ -296,14 +359,43 @@ def connect_wifi():
             mdns_server = None
             mdns_client = None
 
-        display.set_pen(COLOR_BLACK)
-        display.clear()
-        display.set_pen(COLOR_METRA_GREEN)
-        display.text("WiFi OK!", 5, 5, scale=1)
-        display.text(ip, 5, 15, scale=1)
-        i75.update()
-        time.sleep(2)
+        if not silent:
+            display.set_pen(COLOR_BLACK)
+            display.clear()
+            display.set_pen(COLOR_METRA_GREEN)
+            display.text("WiFi OK!", 5, 5, scale=1)
+            display.text(ip, 5, 15, scale=1)
+            i75.update()
+            time.sleep(2)
         return True
+
+
+def check_wifi_and_reconnect():
+    """Check WiFi connection and attempt to reconnect if disconnected.
+    Returns True if connected, False if reconnection failed."""
+    global wifi_connected
+    
+    wlan = network.WLAN(network.STA_IF)
+    
+    if wlan.isconnected():
+        return True
+    
+    # WiFi disconnected - attempt to reconnect
+    print("WiFi disconnected! Attempting to reconnect...")
+    led_pattern_error()
+    wifi_connected = False
+    
+    # Try to reconnect silently (don't update display during normal operation)
+    for attempt in range(3):
+        print(f"Reconnection attempt {attempt + 1}/3...")
+        if connect_wifi(silent=True):
+            print("WiFi reconnected successfully!")
+            led_pattern_success()
+            return True
+        time.sleep(2)
+    
+    print("Failed to reconnect to WiFi after 3 attempts")
+    return False
 
 # ===== TRAIN DATA =====
 class TrainArrival:
@@ -1702,10 +1794,12 @@ async def main_loop():
     # Check for updates if enabled
     if ENABLE_AUTO_UPDATE:
         print("\nChecking for updates...")
+        led_pattern_updating()  # LED pattern while checking
         try:
             auto_update.auto_update_on_startup()
         except Exception as e:
             print(f"Update check failed: {e}")
+            led_pattern_error()
     
     # Fetch initial train data
     fetch_trains()
@@ -1734,6 +1828,8 @@ async def main_loop():
     last_update_check = time.time()
     last_weather_update = time.time()
     last_alerts_update = time.time()
+    last_wifi_check = time.time()
+    wifi_check_interval = 30  # Check WiFi every 30 seconds
     
     while True:
         try:
@@ -1742,6 +1838,15 @@ async def main_loop():
                 wdt.feed()
 
             current_time = time.time()
+            
+            # Check WiFi connection periodically and reconnect if needed
+            if current_time - last_wifi_check >= wifi_check_interval:
+                last_wifi_check = current_time
+                if not check_wifi_and_reconnect():
+                    # WiFi is down and couldn't reconnect
+                    # Continue loop but skip network operations
+                    led_blink(1, 200, 0)  # Single quick blink to indicate offline
+                    continue
 
             # Handle config portal web requests (non-blocking)
             if config_server:
