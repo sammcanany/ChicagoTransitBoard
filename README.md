@@ -2,7 +2,7 @@
 
 Real-time Metra train arrivals using **Pimoroni Interstate 75 W** and 2x 64x32 HUB75 LED matrices.
 
-![Platform](https://img.shields.io/badge/Platform-RP2350-red) ![MicroPython](https://img.shields.io/badge/MicroPython-1.23-blue) ![License](https://img.shields.io/badge/License-CC_BY--NC--SA_4.0-orange)
+![Platform](https://img.shields.io/badge/Platform-RP2350-red) ![MicroPython](https://img.shields.io/badge/MicroPython-1.27-blue) ![License](https://img.shields.io/badge/License-CC_BY--NC--SA_4.0-orange)
 
 ## Features
 
