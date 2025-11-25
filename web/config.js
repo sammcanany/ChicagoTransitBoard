@@ -129,8 +129,8 @@
         try {
             document.getElementById('app').innerHTML = '<div class="loading">Loading configuration...</div>';
             
-            // Give board time to be ready before first request
-            await new Promise(r => setTimeout(r, 300));
+            // Wait for board to be ready (longer delay since CDN loading is async)
+            await new Promise(r => setTimeout(r, 2000));
             
             // Fetch sequentially with longer delay between requests
             // Board can't handle simultaneous requests reliably
@@ -139,7 +139,7 @@
             
             // Much longer delay between requests to ensure board is ready
             // ERR_CONNECTION_RESET means board is still processing previous request
-            await new Promise(r => setTimeout(r, 1000));
+            await new Promise(r => setTimeout(r, 2000));
             
             const statusRes = await fetchWithRetry('/api/status');
             status = await statusRes.json();
