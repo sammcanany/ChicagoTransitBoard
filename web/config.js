@@ -660,8 +660,17 @@
 
     async function save() {
         const data = {};
-        document.querySelectorAll('input[type="text"],input[type="password"],input[type="number"],input[type="range"],input[type="hidden"],select').forEach(i => { if(i.id) data[i.id] = i.value; });
-        document.querySelectorAll('input[type="checkbox"]').forEach(i => { if(i.id) data[i.id] = i.checked; });
+        // Only send non-empty values and checkboxes that are checked
+        document.querySelectorAll('input[type="text"],input[type="password"],input[type="number"],input[type="range"],select').forEach(i => { 
+            if(i.id && i.value) data[i.id] = i.value; 
+        });
+        // Hidden fields - only if they have values
+        document.querySelectorAll('input[type="hidden"]').forEach(i => { 
+            if(i.id && i.value) data[i.id] = i.value; 
+        });
+        document.querySelectorAll('input[type="checkbox"]').forEach(i => { 
+            if(i.id && i.checked) data[i.id] = true; 
+        });
         
         try {
             const res = await fetch('/api/save', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
