@@ -16,7 +16,6 @@ UPDATE_FILES = [
     "auto_update.py",
     "setup_portal.py",
     "config_portal.py",
-    "config_portal_template.html",
     "version.txt"
 ]
 
