@@ -1908,59 +1908,19 @@ async def main_loop():
                                 with open('version.txt', 'r') as vf:
                                     ver = vf.read().strip()
                             except:
-                                ver = '1.7.7'
-                            # Serve tiny loader HTML with CDN fallback retry logic
+                                ver = '1.0.0'
+                            # Serve tiny loader HTML that pulls JS/CSS from CDN
                             loader = f'''<!DOCTYPE html>
 <html><head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
 <title>Transit Board</title>
 <meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/sammcanany/ChicagoTransitBoard@v{ver}/web/styles.css">
 <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
-<style>body{{margin:0;padding:20px;font-family:system-ui;background:#000;color:#fff}}.loading{{text-align:center;padding:40px}}</style>
 </head><body>
-<div id="app"><div class="loading">Loading resources...</div></div>
-<script>
-(function(){{
-  var attempts = 0;
-  var maxAttempts = 5;
-  
-  function loadResources() {{
-    attempts++;
-    var css = document.createElement('link');
-    css.rel = 'stylesheet';
-    css.href = 'https://cdn.jsdelivr.net/gh/sammcanany/ChicagoTransitBoard@v{ver}/web/styles.css?_=' + Date.now();
-    
-    var js = document.createElement('script');
-    js.src = 'https://cdn.jsdelivr.net/gh/sammcanany/ChicagoTransitBoard@v{ver}/web/config.js?_=' + Date.now();
-    
-    var loaded = 0;
-    function onLoad() {{
-      loaded++;
-      if (loaded === 2) console.log('Resources loaded successfully');
-    }}
-    
-    function onError(e) {{
-      console.error('Failed to load resource, attempt ' + attempts + '/' + maxAttempts);
-      if (attempts < maxAttempts) {{
-        setTimeout(loadResources, 1000 * attempts);
-      }} else {{
-        document.getElementById('app').innerHTML = '<div class="error"><h2>CDN Error</h2><p>Cannot load resources from CDN</p><p>Check your internet connection</p><button onclick="location.reload()">Retry</button></div>';
-      }}
-    }}
-    
-    css.onload = onLoad;
-    css.onerror = onError;
-    js.onload = onLoad;
-    js.onerror = onError;
-    
-    document.head.appendChild(css);
-    document.body.appendChild(js);
-  }}
-  
-  loadResources();
-}})();
-</script>
+<div id="app"><div class="loading">Loading...</div></div>
+<script src="https://cdn.jsdelivr.net/gh/sammcanany/ChicagoTransitBoard@v{ver}/web/config.js"></script>
 </body></html>'''
                             cl.send('HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n')
                             cl.send(loader)
