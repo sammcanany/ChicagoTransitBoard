@@ -180,127 +180,21 @@ def get_system_status():
     }
 
 def config_page(error='', success=''):
-    """Main configuration page using shared HTML template"""
-    config = get_current_config()
-    status = get_system_status()
-    
-    # Load template file
-    try:
-        with open('config_portal_template.html', 'r') as f:
-            template = f.read()
-    except Exception as e:
-        return f"<html><body><h1>Error loading template</h1><p>{e}</p></body></html>"
-    
-    # Format uptime
-    uptime_sec = status['uptime']
-    uptime_str = f"{uptime_sec // 3600}h {(uptime_sec % 3600) // 60}m"
-    
-    # Format memory
-    mem_pct = int((status['free_memory'] / status['total_memory']) * 100)
-    
-    # Prepare template replacements
-    replacements = {
-        # Status values
-        '{{STATUS_ONLINE_CLASS}}': 'online' if status['wifi_connected'] else '',
-        '{{WIFI_STATUS}}': 'Online' if status['wifi_connected'] else 'Offline',
-        '{{VERSION}}': status['version'],
-        '{{UPTIME}}': uptime_str,
-        '{{MEMORY_PCT}}': str(mem_pct),
-        
-        # WiFi settings
-        '{{WIFI_SSID}}': str(config.get('wifi_ssid') or ''),
-        
-        # API Keys
-        '{{METRA_TOKEN}}': str(config.get('metra_token') or ''),
-        '{{CTA_TOKEN}}': str(config.get('cta_token') or ''),
-        
-        # Transit line info
-        '{{LINE_ID}}': str(config.get('line_id') or ''),
-        '{{LINE_NAME}}': str(config.get('line_name') or ''),
-        '{{STATION_ID}}': str(config.get('station_id') or ''),
-        '{{STATION_NAME}}': str(config.get('station_name') or ''),
-        '{{SECONDARY_LINE_ID}}': str(config.get('secondary_line_id') or ''),
-        '{{SECONDARY_LINE_NAME}}': str(config.get('secondary_line_name') or ''),
-        '{{SECONDARY_CHECKED}}': 'checked' if config.get('secondary_line_id') else '',
-        '{{SECONDARY_DISPLAY}}': '' if config.get('secondary_line_id') else 'display: none',
-        
-        # Rotation mode (v1.4.0)
-        '{{ROTATION_MODE_DIRECTION}}': 'selected' if config.get('rotation_mode', 'direction') == 'direction' else '',
-        '{{ROTATION_MODE_STATION}}': 'selected' if config.get('rotation_mode', 'direction') == 'station' else '',
-        '{{DIRECTION_MODE_DISPLAY}}': 'display: none' if config.get('rotation_mode', 'direction') == 'station' else '',
-        '{{STATION_MODE_DISPLAY}}': 'display: none' if config.get('rotation_mode', 'direction') == 'direction' else '',
-        
-        # Display settings
-        '{{BRIGHTNESS}}': str(config.get('brightness', 0.7)),
-        '{{BRIGHTNESS_PCT}}': str(int(config.get('brightness', 0.7) * 100)),
-        '{{ROTATION_TIME}}': str(config.get('rotation_time', 5)),
-        '{{UPDATE_INTERVAL}}': str(config.get('update_interval', 60)),
-        '{{NUM_TRAINS}}': str(config.get('num_trains', 4)),
-        
-        # Features
-        '{{SERVICE_ALERTS_CHECKED}}': 'checked' if config.get('enable_service_alerts', True) else '',
-        '{{ALERT_ICONS_CHECKED}}': 'checked' if config.get('enable_alert_icons', True) else '',
-        '{{ALERTS_UPDATE_INTERVAL}}': str(config.get('alerts_update_interval', 180)),
-        '{{AUTO_UPDATE_CHECKED}}': 'checked' if config.get('enable_auto_update', True) else '',
-        '{{UPDATE_DAILY_SELECTED}}': 'selected' if config.get('check_update_interval', 604800) == 86400 else '',
-        '{{UPDATE_WEEKLY_SELECTED}}': 'selected' if config.get('check_update_interval', 604800) == 604800 else '',
-        '{{UPDATE_MONTHLY_SELECTED}}': 'selected' if config.get('check_update_interval', 604800) == 2592000 else '',
-        
-        # Weather settings
-        '{{WEATHER_CHECKED}}': 'checked' if config.get('enable_weather', False) else '',
-        '{{WEATHER_STATUS}}': 'Enabled' if config.get('enable_weather', False) else 'Disabled',
-        '{{WEATHER_GOV_SELECTED}}': 'selected' if config.get('weather_api_service', 'weathergov') == 'weathergov' else '',
-        '{{WEATHER_OWM_SELECTED}}': 'selected' if config.get('weather_api_service', 'weathergov') == 'openweathermap' else '',
-        '{{WEATHER_ZIP}}': str(config.get('weather_zip_code') or ''),
-        '{{WEATHER_API_KEY}}': str(config.get('weather_api_key') or ''),
-        '{{WEATHER_ICON_SELECTED}}': 'selected' if config.get('weather_display_mode', 'icon_only') == 'icon_only' else '',
-        '{{WEATHER_TEMP_SELECTED}}': 'selected' if config.get('weather_display_mode', 'icon_only') == 'icon_and_temp' else '',
-        '{{WEATHER_15MIN_SELECTED}}': 'selected' if config.get('weather_update_interval', 1800) == 900 else '',
-        '{{WEATHER_30MIN_SELECTED}}': 'selected' if config.get('weather_update_interval', 1800) == 1800 else '',
-        '{{WEATHER_60MIN_SELECTED}}': 'selected' if config.get('weather_update_interval', 1800) == 3600 else '',
-        
-        # Station rotation settings (v1.4.0)
-        '{{STATION1_TRANSIT_TYPE_METRA_SELECTED}}': 'selected' if config.get('station1_transit_type', 'metra') == 'metra' else '',
-        '{{STATION1_TRANSIT_TYPE_CTA_SELECTED}}': 'selected' if config.get('station1_transit_type', 'metra') == 'cta' else '',
-        '{{STATION1_LINE_ID}}': str(config.get('station1_line_id') or ''),
-        '{{STATION1_STATION_ID}}': str(config.get('station1_station_id') or ''),
-        '{{STATION2_TRANSIT_TYPE_METRA_SELECTED}}': 'selected' if config.get('station2_transit_type', 'metra') == 'metra' else '',
-        '{{STATION2_TRANSIT_TYPE_CTA_SELECTED}}': 'selected' if config.get('station2_transit_type', 'metra') == 'cta' else '',
-        '{{STATION2_LINE_ID}}': str(config.get('station2_line_id') or ''),
-        '{{STATION2_STATION_ID}}': str(config.get('station2_station_id') or ''),
-        '{{STATION3_TRANSIT_TYPE_METRA_SELECTED}}': 'selected' if config.get('station3_transit_type', 'metra') == 'metra' else '',
-        '{{STATION3_TRANSIT_TYPE_CTA_SELECTED}}': 'selected' if config.get('station3_transit_type', 'metra') == 'cta' else '',
-        '{{STATION3_LINE_ID}}': str(config.get('station3_line_id') or ''),
-        '{{STATION3_STATION_ID}}': str(config.get('station3_station_id') or ''),
-        
-        # System settings
-        '{{WATCHDOG_CHECKED}}': 'checked' if config.get('enable_watchdog', True) else '',
-        '{{WATCHDOG_5S_SELECTED}}': 'selected' if config.get('watchdog_timeout', 8000) == 5000 else '',
-        '{{WATCHDOG_8S_SELECTED}}': 'selected' if config.get('watchdog_timeout', 8000) == 8000 else '',
-        '{{WATCHDOG_10S_SELECTED}}': 'selected' if config.get('watchdog_timeout', 8000) == 10000 else '',
-        
-        '{{SLEEP_CHECKED}}': 'checked' if config.get('enable_sleep_mode', False) else '',
-        '{{SLEEP_START_20_SELECTED}}': 'selected' if config.get('sleep_start_hour', 23) == 20 else '',
-        '{{SLEEP_START_21_SELECTED}}': 'selected' if config.get('sleep_start_hour', 23) == 21 else '',
-        '{{SLEEP_START_22_SELECTED}}': 'selected' if config.get('sleep_start_hour', 23) == 22 else '',
-        '{{SLEEP_START_23_SELECTED}}': 'selected' if config.get('sleep_start_hour', 23) == 23 else '',
-        '{{SLEEP_START_0_SELECTED}}': 'selected' if config.get('sleep_start_hour', 23) == 0 else '',
-        '{{SLEEP_END_5_SELECTED}}': 'selected' if config.get('sleep_end_hour', 5) == 5 else '',
-        '{{SLEEP_END_6_SELECTED}}': 'selected' if config.get('sleep_end_hour', 5) == 6 else '',
-        '{{SLEEP_END_7_SELECTED}}': 'selected' if config.get('sleep_end_hour', 5) == 7 else '',
-        '{{SLEEP_END_8_SELECTED}}': 'selected' if config.get('sleep_end_hour', 5) == 8 else '',
-        '{{SLEEP_BRIGHTNESS}}': str(config.get('sleep_brightness', 0.1)),
-        '{{SLEEP_BRIGHTNESS_PCT}}': str(int(config.get('sleep_brightness', 0.1) * 100)),
-        
-        '{{ADAPTIVE_CHECKED}}': 'checked' if config.get('enable_adaptive_brightness', False) else '',
-    }
-    
-    # Replace all placeholders
-    html = template
-    for placeholder, value in replacements.items():
-        html = html.replace(placeholder, value)
-    
-    return html
+    """Serve config page using CDN-hosted JavaScript"""
+    return """<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Transit Board Config</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/sammcanany/ChicagoTransitBoard@latest/web/config.css">
+</head>
+<body>
+    <div id="app"></div>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/gh/sammcanany/ChicagoTransitBoard@latest/web/config.js"></script>
+</body>
+</html>"""
 
 def parse_form_data(data):
     """Parse URL-encoded form data"""

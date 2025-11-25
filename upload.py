@@ -17,9 +17,7 @@ FILES_TO_UPLOAD = [
     "main.py",
     "setup_portal.py",
     "config_portal.py",
-    "config_portal_template.html",
     "auto_update.py",
-    "version.txt",
 ]
 
 # Cache file to store file hashes
