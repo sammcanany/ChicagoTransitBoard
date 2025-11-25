@@ -187,12 +187,12 @@ def config_page(error='', success=''):
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Transit Board Config</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/sammcanany/ChicagoTransitBoard@latest/web/config.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/sammcanany/ChicagoTransitBoard@main/web/config.css">
 </head>
 <body>
     <div id="app"></div>
     <script src="https://unpkg.com/lucide@latest"></script>
-    <script src="https://cdn.jsdelivr.net/gh/sammcanany/ChicagoTransitBoard@latest/web/config.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/sammcanany/ChicagoTransitBoard@main/web/config.js"></script>
 </body>
 </html>"""
 
