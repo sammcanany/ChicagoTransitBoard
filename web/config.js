@@ -129,13 +129,17 @@
         try {
             document.getElementById('app').innerHTML = '<div class="loading">Loading configuration...</div>';
             
+            // Give board time to be ready before first request
+            await new Promise(r => setTimeout(r, 300));
+            
             // Fetch sequentially with longer delay between requests
             // Board can't handle simultaneous requests reliably
             const configRes = await fetchWithRetry('/api/config');
             config = await configRes.json();
             
-            // Longer delay between requests to ensure board is ready
-            await new Promise(r => setTimeout(r, 500));
+            // Much longer delay between requests to ensure board is ready
+            // ERR_CONNECTION_RESET means board is still processing previous request
+            await new Promise(r => setTimeout(r, 1000));
             
             const statusRes = await fetchWithRetry('/api/status');
             status = await statusRes.json();
