@@ -664,6 +664,7 @@
 
     async function updateStatus() {
         try {
+            console.log('Updating status...', new Date().toLocaleTimeString());
             const res = await fetchWithRetry('/api/status');
             const s = await res.json();
             
@@ -681,8 +682,10 @@
             
             const memoryEl = document.getElementById('status-memory');
             if (memoryEl) memoryEl.textContent = (s.memory_pct || 0) + '%';
+            
+            console.log('Status updated:', s.uptime, s.memory_pct + '%');
         } catch(e) {
-            console.log('Status update failed:', e);
+            console.error('Status update failed:', e);
         }
     }
 
