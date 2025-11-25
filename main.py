@@ -13,6 +13,12 @@ from interstate75 import Interstate75, DISPLAY_INTERSTATE75_128X64
 i75 = Interstate75(display=DISPLAY_INTERSTATE75_128X64)
 display = i75.display
 
+# Quick LED test on startup (before config loads)
+try:
+    i75.set_led(0, 100, 0)  # Green on boot
+except:
+    pass
+
 # ===== STATUS LED =====
 # Interstate 75 has an onboard RGB LED accessed via i75.set_led(r, g, b)
 # Controlled by ENABLE_STATUS_LED config option
@@ -41,8 +47,18 @@ def led_off():
         pass
 
 def led_connected():
-    """Set LED to dim green to indicate WiFi connected and running"""
-    led_on(r=0, g=20, b=0)
+    """Set LED to green to indicate WiFi connected and running"""
+    # Check if LED is disabled in config
+    if not _led_enabled():
+        try:
+            i75.set_led(0, 0, 0)  # Turn off if disabled
+        except:
+            pass
+        return
+    try:
+        i75.set_led(0, 100, 0)  # Green - visible but not too bright
+    except:
+        pass
 
 def led_set_status(status):
     """Set LED to indicate current status.
@@ -1849,6 +1865,9 @@ async def main_loop():
         print(f"Could not start config portal: {e}")
         config_server = None
 
+    # Set LED to connected state before entering main loop
+    led_connected()
+    
     last_update = time.time()
     last_rotation = time.time()
     last_update_check = time.time()
@@ -1878,145 +1897,93 @@ async def main_loop():
             if config_server:
                 try:
                     cl, addr = config_server.accept()
-                    cl.settimeout(5.0)
+                    cl.settimeout(10.0)  # 10 seconds is plenty for API requests
                     try:
-                        # Read headers first
-                        request = b''
-                        while b'\r\n\r\n' not in request:
-                            chunk = cl.recv(1024)
-                            if not chunk:
-                                break
-                            request += chunk
-
-                        # Find Content-Length in headers
-                        headers_end = request.find(b'\r\n\r\n')
-                        headers_part = request[:headers_end].decode('utf-8')
-                        print(f"Headers: {headers_part[:200]}")
-                        content_length = 0
-                        for line in headers_part.split('\r\n'):
-                            if 'content-length' in line.lower():
-                                print(f"CL header: {line}")
-                                content_length = int(line.split(':')[1].strip())
-                                break
-                        print(f"Content-Length parsed: {content_length}")
-
-                        # Read remaining body based on Content-Length
-                        if content_length > 0:
-                            body_start_idx = headers_end + 4
-                            body = request[body_start_idx:]
-                            # Keep reading until we have full body
-                            while len(body) < content_length:
-                                remaining = content_length - len(body)
-                                chunk = cl.recv(min(4096, remaining))
-                                if not chunk:
-                                    break
-                                body += chunk
-                            request = request[:body_start_idx] + body
-                            print(f"Body received: {len(body)} bytes")
-
-                        request = request.decode('utf-8')
-                        print(f"Web request: {request[:50]}...")
-
+                        request = cl.recv(2048).decode('utf-8')
+                        print(f"Request: {request[:60]}...")
+                        
                         if 'GET / ' in request or 'GET /config' in request:
-                            # Stream template file in larger chunks to avoid splitting placeholders
-                            import config_portal
-                            import gc
-                            gc.collect()  # Free memory first
-                            config = config_portal.get_current_config()
-                            status = config_portal.get_system_status()
+                            # Serve tiny loader HTML that pulls JS/CSS from CDN
+                            loader = '''<!DOCTYPE html>
+<html><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
+<title>Transit Board</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/sammcanany/ChicagoTransitBoard@main/web/styles.css">
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+</head><body>
+<div id="app"><div class="loading">Loading...</div></div>
+<script src="https://cdn.jsdelivr.net/gh/sammcanany/ChicagoTransitBoard@main/web/config.js"></script>
+</body></html>'''
                             cl.send('HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n')
-
-                            # Stream file in 4KB chunks with line-based reading
-                            with open('config_portal_template.html', 'r') as f:
-                                buffer = ''
-                                for line in f:
-                                    # Apply common replacements
-                                    line = line.replace('{{METRA_TOKEN}}', str(config.get('metra_token') or ''))
-                                    line = line.replace('{{STATION_NAME}}', str(config.get('station_name') or ''))
-                                    line = line.replace('{{STATION_ID}}', str(config.get('station_id') or ''))
-                                    line = line.replace('{{LINE_ID}}', str(config.get('line_id') or ''))
-                                    line = line.replace('{{LINE_NAME}}', str(config.get('line_name') or ''))
-                                    line = line.replace('{{BRIGHTNESS}}', str(config.get('brightness', 0.5)))
-                                    line = line.replace('{{BRIGHTNESS_PCT}}', str(int(config.get('brightness', 0.5) * 100)))
-                                    line = line.replace('{{UPDATE_INTERVAL}}', str(config.get('update_interval', 60)))
-                                    line = line.replace('{{ROTATION_TIME}}', str(config.get('rotation_time', 5)))
-                                    line = line.replace('{{NUM_TRAINS}}', str(config.get('num_trains', 4)))
-                                    line = line.replace('{{VERSION}}', status['version'])
-                                    line = line.replace('{{WIFI_SSID}}', str(config.get('wifi_ssid') or ''))
-                                    line = line.replace('{{CTA_TOKEN}}', str(config.get('cta_token') or ''))
-                                    line = line.replace('{{STATUS_ONLINE_CLASS}}', 'online' if status['wifi_connected'] else '')
-                                    line = line.replace('{{WIFI_STATUS}}', 'Online' if status['wifi_connected'] else 'Offline')
-                                    line = line.replace('{{UPTIME}}', f"{status['uptime'] // 3600}h {(status['uptime'] % 3600) // 60}m")
-                                    line = line.replace('{{MEMORY_PCT}}', str(int((status['free_memory'] / status['total_memory']) * 100)))
-                                    # Checkboxes and selects - use empty string for unchecked
-                                    line = line.replace('{{SERVICE_ALERTS_CHECKED}}', 'checked' if config.get('enable_service_alerts', True) else '')
-                                    line = line.replace('{{ALERT_ICONS_CHECKED}}', 'checked' if config.get('enable_alert_icons', True) else '')
-                                    line = line.replace('{{ALERTS_UPDATE_INTERVAL}}', str(config.get('alerts_update_interval', 180)))
-                                    line = line.replace('{{AUTO_UPDATE_CHECKED}}', 'checked' if config.get('enable_auto_update', True) else '')
-                                    line = line.replace('{{WATCHDOG_CHECKED}}', 'checked' if config.get('enable_watchdog', True) else '')
-                                    line = line.replace('{{WEATHER_CHECKED}}', 'checked' if config.get('enable_weather', False) else '')
-                                    line = line.replace('{{WEATHER_STATUS}}', 'Enabled' if config.get('enable_weather', False) else 'Disabled')
-                                    line = line.replace('{{WEATHER_ZIP}}', str(config.get('weather_zip_code', '')))
-                                    line = line.replace('{{WEATHER_API_KEY}}', str(config.get('weather_api_key', '')))
-                                    line = line.replace('{{SECONDARY_CHECKED}}', 'checked' if config.get('secondary_line_id') else '')
-                                    line = line.replace('{{SECONDARY_DISPLAY}}', '' if config.get('secondary_line_id') else 'display: none')
-                                    line = line.replace('{{SECONDARY_LINE_ID}}', str(config.get('secondary_line_id') or ''))
-                                    line = line.replace('{{SECONDARY_LINE_NAME}}', str(config.get('secondary_line_name') or ''))
-                                    line = line.replace('{{ROTATION_MODE_DIRECTION}}', 'selected')
-                                    line = line.replace('{{ROTATION_MODE_STATION}}', '')
-                                    line = line.replace('{{DIRECTION_MODE_DISPLAY}}', '')
-                                    line = line.replace('{{STATION_MODE_DISPLAY}}', 'display: none')
-                                    buffer += line
-                                    if len(buffer) > 2048:
-                                        cl.send(buffer)
-                                        buffer = ''
-                                        gc.collect()
-                                if buffer:
-                                    cl.send(buffer)
+                            cl.send(loader)
+                            
+                        elif 'GET /api/config' in request:
+                            # Return config as JSON
+                            import config_portal
+                            import json
+                            config = config_portal.get_current_config()
+                            cl.send('HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\n\r\n')
+                            cl.send(json.dumps(config))
+                            
+                        elif 'GET /api/status' in request:
+                            # Return status as JSON
+                            import config_portal
+                            import json
+                            status = config_portal.get_system_status()
+                            status_json = {
+                                'version': status['version'],
+                                'wifi_connected': status['wifi_connected'],
+                                'uptime': f"{status['uptime'] // 3600}h {(status['uptime'] % 3600) // 60}m",
+                                'memory_pct': int((status['free_memory'] / status['total_memory']) * 100)
+                            }
+                            cl.send('HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\n\r\n')
+                            cl.send(json.dumps(status_json))
+                            
+                        elif 'POST /api/save' in request:
+                            # Parse JSON body and save config
+                            import config_portal
+                            import json
+                            body = request.split('\r\n\r\n', 1)[1] if '\r\n\r\n' in request else '{}'
+                            try:
+                                data = json.loads(body)
+                                # Convert JSON to form params format
+                                params = {}
+                                for k, v in data.items():
+                                    if isinstance(v, bool):
+                                        if v:
+                                            params[k] = 'true'
+                                    else:
+                                        params[k] = str(v)
+                                # Preserve WiFi settings
+                                params['wifi_ssid'] = WIFI_SSID
+                                params['wifi_password'] = WIFI_PASSWORD
+                                if config_portal.save_config(params):
+                                    cl.send('HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n{"success":true}')
+                                    cl.close()
+                                    import sys
+                                    sys.exit()
+                                else:
+                                    cl.send('HTTP/1.1 500 Error\r\nContent-Type: application/json\r\n\r\n{"success":false}')
+                            except Exception as e:
+                                print(f"Save error: {e}")
+                                cl.send('HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\n\r\n{"error":"' + str(e) + '"}')
+                                
+                        elif 'OPTIONS ' in request:
+                            # Handle CORS preflight
+                            cl.send('HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type\r\n\r\n')
+                            
                         elif 'GET /restart' in request:
-                            cl.send('HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<h1>Restarting...</h1>')
+                            cl.send('HTTP/1.1 200 OK\r\n\r\nRestarting...')
                             cl.close()
                             import machine
                             machine.reset()
-                        elif 'POST /save' in request:
-                            import config_portal
-                            body = request.split('\r\n\r\n', 1)[1] if '\r\n\r\n' in request else ''
-                            print(f"POST body length: {len(body)}")
-                            print(f"POST body: {body[:200]}")
-                            params = config_portal.parse_form_data(body)
-                            print(f"Parsed station: {params.get('primary_station_id', 'NOT FOUND')}")
-                            # Preserve WiFi settings
-                            params['wifi_ssid'] = WIFI_SSID
-                            params['wifi_password'] = WIFI_PASSWORD
-                            if config_portal.save_config(params):
-                                # Send success page and soft restart
-                                cl.send('HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n')
-                                cl.send('<!DOCTYPE html><html><head><title>Saved</title>')
-                                cl.send('<meta name="viewport" content="width=device-width,initial-scale=1">')
-                                cl.send('<style>body{font-family:sans-serif;text-align:center;padding:50px;background:#1a1a2e;color:#fff}')
-                                cl.send('.success{background:#28a745;padding:20px;border-radius:8px;margin:20px auto;max-width:400px}')
-                                cl.send('</style></head><body>')
-                                cl.send('<div class="success"><h2>Configuration Saved!</h2>')
-                                cl.send('<p>Restarting...</p></div>')
-                                cl.send('</body></html>')
-                                cl.close()
-                                # Soft restart - re-execute main.py
-                                import sys
-                                sys.exit()
-                            else:
-                                cl.send('HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n')
-                                cl.send('<!DOCTYPE html><html><body style="font-family:sans-serif;text-align:center;padding:50px">')
-                                cl.send('<h2 style="color:red">Failed to save configuration</h2>')
-                                cl.send('<p><a href="/">Try Again</a></p></body></html>')
                         else:
-                            # Handle favicon and other requests
-                            cl.send('HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n')
+                            cl.send('HTTP/1.1 404 Not Found\r\n\r\n')
                     except Exception as e:
-                        print(f"Web request error: {e}")
-                        try:
-                            cl.send('HTTP/1.1 500 Error\r\n\r\n')
-                        except:
-                            pass
+                        if 'ETIMEDOUT' not in str(e):
+                            print(f"Web error: {e}")
                     finally:
                         try:
                             cl.close()

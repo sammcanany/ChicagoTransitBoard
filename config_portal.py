@@ -58,6 +58,7 @@ def get_current_config():
             # v1.3.0 features
             'enable_watchdog': getattr(config, 'ENABLE_WATCHDOG', True),
             'watchdog_timeout': getattr(config, 'WATCHDOG_TIMEOUT', 8000),
+            'enable_status_led': getattr(config, 'ENABLE_STATUS_LED', True),
             'enable_weather': getattr(config, 'ENABLE_WEATHER', False),
             'weather_api_service': getattr(config, 'WEATHER_API_SERVICE', 'weathergov'),
             'weather_api_key': getattr(config, 'WEATHER_API_KEY', ''),
@@ -91,6 +92,7 @@ def get_current_config():
             'check_update_interval': 604800,
             'enable_watchdog': True,
             'watchdog_timeout': 8000,
+            'enable_status_led': True,
             'enable_weather': False,
             'weather_api_service': 'weathergov',
             'weather_api_key': '',
@@ -279,6 +281,7 @@ def save_config(params):
     enable_alert_icons = 'enable_alert_icons' in params or 'enable-alert-icons' in params
     enable_auto_update = 'enable_auto_update' in params or 'enable-auto-update' in params
     enable_watchdog = 'enable_watchdog' in params or 'enable-watchdog' in params
+    enable_status_led = 'enable_status_led' in params or 'enable-status-led' in params
     enable_weather = 'enable_weather' in params or 'enable-weather' in params
     enable_sleep_mode = 'enable_sleep_mode' in params or 'enable-sleep' in params
     enable_adaptive_brightness = 'enable_adaptive_brightness' in params or 'enable-adaptive' in params
@@ -341,6 +344,9 @@ CHECK_UPDATE_INTERVAL = {params.get('check_update_interval', '604800')}
 # System Reliability
 ENABLE_WATCHDOG = {enable_watchdog}
 WATCHDOG_TIMEOUT = {params.get('watchdog_timeout', '8000')}
+
+# Status LED
+ENABLE_STATUS_LED = {enable_status_led}
 
 # Weather
 ENABLE_WEATHER = {enable_weather}

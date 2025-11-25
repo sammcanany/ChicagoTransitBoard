@@ -1,0 +1,270 @@
+/* Chicago Transit Board - Config Portal Styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #f5f5f5;
+    color: #1a1a1a;
+    overflow-x: hidden;
+}
+
+.loading, .error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 20px;
+    text-align: center;
+}
+
+.error h2 { color: #c62828; margin-bottom: 16px; }
+.error p { margin-bottom: 12px; color: #666; }
+.error button {
+    padding: 12px 24px;
+    background: #667eea;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    cursor: pointer;
+    margin-top: 16px;
+}
+
+.page {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100vh;
+    background: #f5f5f5;
+    transition: transform 0.3s ease-in-out;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: calc(80px + env(safe-area-inset-bottom, 20px));
+}
+
+.page.hidden { display: none; }
+.page.slide-left {
+    transform: translateX(-30%);
+    filter: brightness(0.8);
+    pointer-events: none;
+}
+
+.header {
+    background: #667eea;
+    color: white;
+    padding: 16px 20px;
+    padding-top: calc(16px + env(safe-area-inset-top, 0px));
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.back-btn {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 24px;
+    cursor: pointer;
+    padding: 8px;
+    margin: -8px;
+    display: none;
+}
+
+.page:not(#main-page) .back-btn { display: block; }
+.header-title { font-size: 20px; font-weight: 600; }
+
+.status-card {
+    background: white;
+    margin: 16px;
+    padding: 16px;
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.status-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+}
+
+.status-item { text-align: center; }
+.status-label { font-size: 12px; color: #666; margin-bottom: 4px; }
+.status-value { font-size: 16px; font-weight: 600; }
+.status-value.online { color: #10b981; }
+
+.menu-list {
+    background: white;
+    margin: 16px;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.menu-item {
+    display: flex;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid #f0f0f0;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.menu-item:last-child { border-bottom: none; }
+.menu-item:active { background: #f5f5f5; }
+
+.menu-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    margin-right: 16px;
+}
+
+.menu-content { flex: 1; min-width: 0; }
+.menu-title { font-size: 16px; font-weight: 500; margin-bottom: 4px; }
+.menu-subtitle { font-size: 14px; color: #666; }
+.menu-arrow { color: #ccc; font-size: 20px; }
+
+.form-section {
+    background: white;
+    margin: 16px;
+    padding: 16px;
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.section-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 16px;
+}
+
+.form-group { margin-bottom: 20px; }
+.form-group:last-child { margin-bottom: 0; }
+
+label {
+    display: block;
+    font-size: 14px;
+    font-weight: 500;
+    margin-bottom: 8px;
+}
+
+input[type="text"],
+input[type="password"],
+input[type="number"],
+select {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 16px;
+}
+
+input:focus, select:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+input[type="range"] {
+    -webkit-appearance: none;
+    width: 100%;
+    height: 6px;
+    background: #ddd;
+    border-radius: 3px;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 20px;
+    height: 20px;
+    background: #667eea;
+    border-radius: 50%;
+    cursor: pointer;
+}
+
+.help-text { font-size: 13px; color: #666; margin-top: 6px; }
+
+.toggle-group {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 0;
+}
+
+.toggle-label { flex: 1; margin: 0; font-weight: 500; }
+
+.toggle-switch {
+    position: relative;
+    width: 52px;
+    height: 32px;
+}
+
+.toggle-switch input { opacity: 0; width: 0; height: 0; }
+
+.toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-color: #ccc;
+    transition: 0.3s;
+    border-radius: 34px;
+}
+
+.toggle-slider:before {
+    position: absolute;
+    content: "";
+    height: 24px;
+    width: 24px;
+    left: 4px;
+    bottom: 4px;
+    background-color: white;
+    transition: 0.3s;
+    border-radius: 50%;
+}
+
+input:checked + .toggle-slider { background-color: #667eea; }
+input:checked + .toggle-slider:before { transform: translateX(20px); }
+
+.action-buttons {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: white;
+    padding: 16px;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 20px));
+    box-shadow: 0 -2px 8px rgba(0,0,0,0.1);
+    display: flex;
+    gap: 12px;
+    z-index: 100;
+}
+
+.btn {
+    flex: 1;
+    padding: 14px 24px;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.btn:active { transform: scale(0.98); }
+.btn-primary { background: #667eea; color: white; }
+.btn-secondary { background: #e0e0e0; color: #333; }
