@@ -326,8 +326,8 @@
                         <div class="form-group">
                             <label>Transit Type</label>
                             <select id="station1_transit_type" onchange="TC.updateTransitType('station1')">
-                                <option value="metra">Metra</option>
-                                <option value="cta">CTA</option>
+                                <option value="metra" ${(c.station1_transit_type||'metra')==='metra'?'selected':''}>Metra</option>
+                                <option value="cta" ${c.station1_transit_type==='cta'?'selected':''}>CTA</option>
                             </select>
                         </div>
                         <div class="form-group">
@@ -354,8 +354,8 @@
                         <div class="form-group">
                             <label>Transit Type</label>
                             <select id="station2_transit_type" onchange="TC.updateTransitType('station2')">
-                                <option value="metra">Metra</option>
-                                <option value="cta">CTA</option>
+                                <option value="metra" ${(c.station2_transit_type||'metra')==='metra'?'selected':''}>Metra</option>
+                                <option value="cta" ${c.station2_transit_type==='cta'?'selected':''}>CTA</option>
                             </select>
                         </div>
                         <div class="form-group">
@@ -382,8 +382,8 @@
                         <div class="form-group">
                             <label>Transit Type</label>
                             <select id="station3_transit_type" onchange="TC.updateTransitType('station3')">
-                                <option value="metra">Metra</option>
-                                <option value="cta">CTA</option>
+                                <option value="metra" ${(c.station3_transit_type||'metra')==='metra'?'selected':''}>Metra</option>
+                                <option value="cta" ${c.station3_transit_type==='cta'?'selected':''}>CTA</option>
                             </select>
                         </div>
                         <div class="form-group">
