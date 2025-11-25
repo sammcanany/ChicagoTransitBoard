@@ -32,6 +32,13 @@ def setup_mdns(hostname="board"):
         print(f"mDNS setup failed: {e}")
         return False
 
+def detect_transit_type(line_code):
+    """Determine if a line is CTA or Metra"""
+    if not line_code:
+        return "metra"
+    cta_lines = ["Red", "Blue", "Brn", "Brown", "G", "Green", "Org", "Orange", "P", "Purple", "Pink", "Y", "Yellow"]
+    return "cta" if line_code in cta_lines else "metra"
+
 def get_current_config():
     """Read current config.py settings"""
     try:
@@ -46,6 +53,10 @@ def get_current_config():
             'line_name': getattr(config, 'LINE_1', ''),
             'secondary_line_id': getattr(config, 'LINE_2', None),
             'secondary_line_name': getattr(config, 'LINE_2', None),
+            'secondary_station_id': getattr(config, 'SECONDARY_STATION_ID', None),
+            'secondary_station_name': getattr(config, 'SECONDARY_STATION_NAME', None),
+            'secondary_transit_type': detect_transit_type(getattr(config, 'LINE_2', None)),
+            'enable_secondary': getattr(config, 'LINE_2', None) is not None,
             'brightness': getattr(config, 'BRIGHTNESS', 0.5),
             'update_interval': getattr(config, 'UPDATE_INTERVAL', 60),
             'rotation_time': getattr(config, 'DISPLAY_ROTATION_TIME', 5),
@@ -70,7 +81,16 @@ def get_current_config():
             'sleep_end_hour': getattr(config, 'SLEEP_END_HOUR', 5),
             'sleep_brightness': getattr(config, 'SLEEP_BRIGHTNESS', 0.1),
             'enable_adaptive_brightness': getattr(config, 'ENABLE_ADAPTIVE_BRIGHTNESS', False),
+            'rotation_mode': getattr(config, 'ROTATION_MODE', 'direction'),
         }
+        
+        # Extract station rotation data if available
+        rotation_stations = getattr(config, 'ROTATION_STATIONS', [])
+        for i, station in enumerate(rotation_stations[:3], 1):  # Up to 3 stations
+            result[f'station{i}_station_id'] = station.get('id', '')
+            result[f'station{i}_line_id'] = station.get('line', '')
+        
+        return result
     except ImportError:
         return {
             'wifi_ssid': '',
@@ -82,6 +102,10 @@ def get_current_config():
             'line_name': '',
             'secondary_line_id': None,
             'secondary_line_name': None,
+            'secondary_station_id': None,
+            'secondary_station_name': None,
+            'secondary_transit_type': 'metra',
+            'enable_secondary': False,
             'brightness': 0.5,
             'update_interval': 60,
             'rotation_time': 5,
@@ -104,6 +128,13 @@ def get_current_config():
             'sleep_end_hour': 5,
             'sleep_brightness': 0.1,
             'enable_adaptive_brightness': False,
+            'rotation_mode': 'direction',
+            'station1_station_id': '',
+            'station1_line_id': '',
+            'station2_station_id': '',
+            'station2_line_id': '',
+            'station3_station_id': '',
+            'station3_line_id': '',
         }
 
 def get_system_status():
@@ -329,9 +360,34 @@ NUM_TRAINS_TO_SHOW = {params.get('num_trains', '4')}
 
 # Rotation Mode
 ROTATION_MODE = "{params.get('rotation_mode', 'direction')}"  # "direction" or "station"
-ROTATION_STATIONS = []  # Configure manually in config.py - see config.example.py
-STATION_ROTATION_TIME = 10
+"""
 
+    # Build ROTATION_STATIONS array if in station mode
+    if params.get('rotation_mode') == 'station':
+        stations = []
+        for i in range(1, 4):  # Support up to 3 stations
+            station_id = params.get(f'station{i}_station_id')
+            line_id = params.get(f'station{i}_line_id')
+            if station_id and line_id:
+                # Detect transit type based on line code
+                transit_type = detect_transit_type(line_id)
+                # Get station name from the station_id (format is usually descriptive)
+                station_name = station_id  # Use ID as name for now
+                stations.append(f'    {{"name": "{station_name}", "id": "{station_id}", "line": "{line_id}", "transit_type": "{transit_type}"}}')
+        
+        if stations:
+            config_content += "ROTATION_STATIONS = [\n"
+            config_content += ',\n'.join(stations)
+            config_content += "\n]\n"
+        else:
+            config_content += "ROTATION_STATIONS = []\n"
+    else:
+        config_content += "ROTATION_STATIONS = []\n"
+    
+    config_content += """STATION_ROTATION_TIME = 10
+"""
+
+    config_content += f"""
 # Service Alerts
 ENABLE_SERVICE_ALERTS = {enable_service_alerts}
 ENABLE_ALERT_ICONS = {enable_alert_icons}

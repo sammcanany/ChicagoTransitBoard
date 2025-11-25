@@ -441,17 +441,32 @@ def check_wifi_and_reconnect():
 
 # ===== TRAIN DATA =====
 class TrainArrival:
-    def __init__(self, route, direction, minutes, line_num=1):
+    def __init__(self, route, direction, minutes, line_num=1, arrival_timestamp=None):
         self.route = route
         self.direction = direction  # "Inbound" or "Outbound"
-        self.minutes = minutes
+        self.minutes = minutes  # Initial minutes (for backwards compatibility)
         self.line_num = line_num  # 1 or 2 (which line this train belongs to)
+        # Store actual arrival time as timestamp for dynamic countdown
+        if arrival_timestamp is None:
+            # Calculate timestamp from minutes if not provided
+            self.arrival_timestamp = time.time() + (minutes * 60)
+        else:
+            self.arrival_timestamp = arrival_timestamp
+    
+    def get_minutes(self):
+        """Calculate current minutes until arrival based on current time"""
+        remaining = int((self.arrival_timestamp - time.time()) / 60)
+        return max(0, remaining)  # Don't show negative times
 
 # Separate lists for each line and direction
 line1_inbound = []
 line1_outbound = []
 line2_inbound = []
 line2_outbound = []
+
+# Station rotation cache: dictionary indexed by station index
+# Each entry contains: {"inbound": [], "outbound": [], "last_update": timestamp}
+station_cache = {}
 
 # Service alerts
 active_alerts = []
@@ -712,7 +727,6 @@ def parse_gtfs_protobuf(data):
             else:
                 pos += 1  # Skip unknown
 
-        print(f"Parsed {len(result['entity'])} entities from protobuf")
         return result
     except Exception as e:
         print(f"Protobuf parse error: {e}")
@@ -915,7 +929,6 @@ def parse_gtfs_alerts_protobuf(data):
             else:
                 pos += 1
 
-        print(f"Parsed {len(result['entity'])} alerts from protobuf")
         return result
     except Exception as e:
         print(f"Alerts protobuf parse error: {e}")
@@ -932,27 +945,24 @@ def fetch_metra_trains(station_id, line_code):
             print("Metra API token not configured - skipping fetch")
             return trains_inbound, trains_outbound
 
+        print(f"Fetching Metra trains for station {station_id} on {line_code}")
+
         import time as time_module
         from time import localtime
         lt = localtime()
-        print(f"Fetching Metra trains for {station_id} on {line_code}")
-        print(f"Current time: {lt[3]:02d}:{lt[4]:02d}:{lt[5]:02d}")
 
         # Metra GTFS-RT API - pass token as query parameter
         url = f"{TRIP_UPDATES_URL}?api_token={METRA_API_TOKEN}"
-        print(f"Requesting Metra API...")
 
         response = urequests.get(url, timeout=15)
-        print(f"Metra API status: {response.status_code}")
         if response.status_code != 200:
-            print(f"Metra API error: {response.status_code}")
+            print(f"Metra API error: HTTP {response.status_code}")
             response.close()
             return trains_inbound, trains_outbound
 
         # Read raw content - Metra returns protobuf
         raw_content = response.content
         response.close()
-        print(f"Response size: {len(raw_content)} bytes")
 
         # Parse GTFS-RT protobuf manually (simplified parser)
         data = parse_gtfs_protobuf(raw_content)
@@ -1020,7 +1030,7 @@ def fetch_metra_trains(station_id, line_code):
             # Higher sequence = Inbound (toward Chicago)
             direction = "Inbound" if stop_sequence > 15 else "Outbound"
 
-            train = TrainArrival(line_code, direction, minutes, 1)
+            train = TrainArrival(line_code, direction, minutes, 1, arrival_timestamp=arrival_time)
 
             if direction == "Inbound":
                 trains_inbound.append(train)
@@ -1028,10 +1038,10 @@ def fetch_metra_trains(station_id, line_code):
                 trains_outbound.append(train)
 
         # Sort by arrival time
-        trains_inbound.sort(key=lambda t: t.minutes)
-        trains_outbound.sort(key=lambda t: t.minutes)
-
-        print(f"Found {len(trains_inbound)} inbound, {len(trains_outbound)} outbound trains")
+        trains_inbound.sort(key=lambda t: t.arrival_timestamp)
+        trains_outbound.sort(key=lambda t: t.arrival_timestamp)
+        
+        print(f"Found {len(trains_inbound)} inbound, {len(trains_outbound)} outbound Metra trains")
 
     except Exception as e:
         import sys
@@ -1045,9 +1055,20 @@ def fetch_cta_trains(station_id, line_code=None):
     trains_inbound = []
     trains_outbound = []
     
+    # Normalize CTA line name to API code
+    line_map = {
+        "Brown": "Brn",
+        "Green": "G",
+        "Orange": "Org",
+        "Purple": "P",
+        "Yellow": "Y"
+    }
+    if line_code in line_map:
+        line_code = line_map[line_code]
+    
+    print(f"Fetching CTA trains for station {station_id}" + (f" on {line_code}" if line_code else ""))
+    
     try:
-        print(f"Fetching CTA trains for station {station_id}")
-        
         # CTA Train Tracker API
         # http://lapi.transitchicago.com/api/1.0/ttarrivals.aspx?key=KEY&stpid=STATION_ID&outputType=JSON
         url = f"http://lapi.transitchicago.com/api/1.0/ttarrivals.aspx?key={CTA_API_KEY}&stpid={station_id}&outputType=JSON"
@@ -1058,7 +1079,7 @@ def fetch_cta_trains(station_id, line_code=None):
         
         response = urequests.get(url, timeout=10)
         if response.status_code != 200:
-            print(f"CTA API error: {response.status_code}")
+            print(f"CTA API error: HTTP {response.status_code}")
             response.close()
             return trains_inbound, trains_outbound
         
@@ -1076,71 +1097,99 @@ def fetch_cta_trains(station_id, line_code=None):
         
         # Parse train arrivals
         if "eta" in data["ctatt"]:
+            current_time = time.time()
+            
             for arrival in data["ctatt"]["eta"]:
-                # CTA provides predicted minutes directly in some cases
-                # Or we parse from arrT (arrival time)
-
-                # Try to get predicted minutes if available
-                # Some CTA responses include this directly
-                if "prdt" in arrival and "arrT" in arrival:
-                    # Both prediction time and arrival time available
-                    # Parse times: Format is "YYYYMMDD HH:MM:SS"
+                # Parse arrival time (ISO 8601 format: 2025-11-25T09:46:21)
+                if "arrT" in arrival:
                     try:
-                        pred_str = arrival["prdt"]  # When prediction was made
-                        arr_str = arrival["arrT"]   # Predicted arrival time
-
-                        # Extract just time portions (HH:MM:SS)
-                        pred_parts = pred_str.split(" ")[1].split(":")
-                        arr_parts = arr_str.split(" ")[1].split(":")
-
-                        pred_mins = int(pred_parts[0]) * 60 + int(pred_parts[1])
-                        arr_mins = int(arr_parts[0]) * 60 + int(arr_parts[1])
-
-                        # Calculate difference
-                        minutes = arr_mins - pred_mins
-
-                        # Handle midnight crossover
+                        arr_str = arrival["arrT"]
+                        
+                        # Parse ISO 8601 format: YYYY-MM-DDTHH:MM:SS
+                        # Split into date and time parts
+                        date_time_parts = arr_str.split("T")
+                        if len(date_time_parts) != 2:
+                            continue
+                        
+                        date_part = date_time_parts[0].split("-")
+                        time_part = date_time_parts[1].split(":")
+                        
+                        year = int(date_part[0])
+                        month = int(date_part[1])
+                        day = int(date_part[2])
+                        hour = int(time_part[0])
+                        minute = int(time_part[1])
+                        second = int(time_part[2])
+                        
+                        # Convert to timestamp
+                        # CTA API returns Central Time, but board uses UTC
+                        # Chicago is UTC-6 (CST) or UTC-5 (CDT)
+                        # Add 6 hours (21600 seconds) to convert from Chicago time to UTC
+                        arrival_time = time.mktime((year, month, day, hour, minute, second, 0, 0)) + 21600
+                        
+                        # Calculate minutes until arrival
+                        minutes = int((arrival_time - current_time) / 60)
+                        
+                        # Skip past trains
                         if minutes < 0:
-                            minutes += 1440  # Add 24 hours (1440 minutes)
-
-                        # Limit to reasonable range
-                        if minutes < 0:
-                            minutes = 0
+                            continue
+                        
+                        # Skip trains more than 60 min away
                         if minutes > 60:
-                            continue  # Skip trains more than 60 min away
-
+                            continue
+                        
                     except (ValueError, IndexError, KeyError):
-                        # Fallback: assume arriving soon
-                        minutes = 5
+                        # Skip if we can't parse the time
+                        continue
                 else:
-                    # No time info, skip this arrival
+                    # No arrival time, skip
                     continue
 
                 # Get route and direction
                 route = arrival.get("rt", line_code or "Unknown")
                 destination = arrival.get("destNm", "")
+                
+                # CTA uses direction codes in trDr field:
+                # 1 = South/West (toward terminals), 5 = North/East (toward Loop/downtown)
+                # For most lines: 5 = toward downtown (Inbound), 1 = away from downtown (Outbound)
+                # However, this is line-dependent, so we also check destination
+                
+                direction_code = arrival.get("trDr", "")
+                
+                # For Brown line: Loop is inbound, Kimball is outbound
+                # For Red line: 95th and Howard are terminals, downtown is inbound
+                # General rule: if going TO a terminal/end station, use destination
+                
+                # Check if this is going toward downtown/Loop keywords
+                downtown_keywords = ["Loop", "downtown", "Clark/Lake"]
+                toward_downtown = any(keyword in destination for keyword in downtown_keywords)
+                
+                # For terminals, check if it's the main terminal (Loop side = inbound)
+                terminal_inbound = ["Loop"]  # These terminals are considered "inbound"
+                terminal_outbound = ["Kimball", "95th/Dan Ryan", "Howard", "Forest Park", "Harlem", "O'Hare", "UIC-Halsted", "Midway"]
+                
+                # Determine direction
+                if toward_downtown or any(t in destination for t in terminal_inbound):
+                    direction = "Inbound"
+                elif any(t in destination for t in terminal_outbound):
+                    direction = "Outbound"
+                else:
+                    # Fallback: use direction code (5 = typically inbound, 1 = typically outbound)
+                    direction = "Inbound" if direction_code == "5" else "Outbound"
 
-                # Direction determination based on destination
-                # Inbound = toward downtown/Loop
-                # Outbound = away from downtown
-                inbound_keywords = ["Loop", "Howard", "95th/Dan Ryan", "Kimball", "UIC", "Forest Park", "Harlem", "downtown"]
-                is_inbound = any(keyword in destination for keyword in inbound_keywords)
+                train = TrainArrival(route, direction, minutes, 1, arrival_timestamp=arrival_time)
 
-                direction = "Inbound" if is_inbound else "Outbound"
-
-                train = TrainArrival(route, direction, minutes, 1)
-
-                if is_inbound:
+                if direction == "Inbound":
                     trains_inbound.append(train)
                 else:
                     trains_outbound.append(train)
         
         # Sort by arrival time
-        trains_inbound.sort(key=lambda t: t.minutes)
-        trains_outbound.sort(key=lambda t: t.minutes)
+        trains_inbound.sort(key=lambda t: t.arrival_timestamp)
+        trains_outbound.sort(key=lambda t: t.arrival_timestamp)
         
-        print(f"Found {len(trains_inbound)} inbound, {len(trains_outbound)} outbound trains")
-        
+        print(f"Found {len(trains_inbound)} inbound, {len(trains_outbound)} outbound CTA trains")
+
     except Exception as e:
         print(f"Error fetching CTA trains: {e}")
     
@@ -1148,8 +1197,7 @@ def fetch_cta_trains(station_id, line_code=None):
 
 def fetch_trains_for_station(station_index):
     """Fetch train arrivals for a specific station in rotation mode"""
-    global line1_inbound, line1_outbound, line2_inbound, line2_outbound
-    global api_error, last_successful_update, cached_trains_available
+    global station_cache, api_error, last_successful_update, cached_trains_available
     
     if station_index >= len(ROTATION_STATIONS):
         print(f"Invalid station index: {station_index}")
@@ -1159,20 +1207,37 @@ def fetch_trains_for_station(station_index):
     print(f"Fetching trains for: {station['name']} ({station['line']})")
     
     try:
-        # Clear line2 data (not used in rotation mode)
-        line2_inbound = []
-        line2_outbound = []
-        
         # Call appropriate API based on transit type
+        # Use smart detection as fallback: CTA station IDs are 5-digit numbers, Metra are text
         transit_type = station.get("transit_type", "metra").lower()
         
+        # Override if transit_type seems wrong based on station ID format
+        station_id = str(station["id"])
+        if station_id.isdigit() and len(station_id) == 5:
+            # CTA station ID (5-digit numeric)
+            if transit_type != "cta":
+                print(f"Note: Station ID {station_id} appears to be CTA, overriding transit_type")
+                transit_type = "cta"
+        elif not station_id.isdigit():
+            # Metra station ID (text like RAVENSWOOD)
+            if transit_type != "metra":
+                print(f"Note: Station ID {station_id} appears to be Metra, overriding transit_type")
+                transit_type = "metra"
+        
         if transit_type == "cta":
-            line1_inbound, line1_outbound = fetch_cta_trains(station["id"], station["line"])
+            inbound, outbound = fetch_cta_trains(station["id"], station["line"])
         else:  # metra
-            line1_inbound, line1_outbound = fetch_metra_trains(station["id"], station["line"])
+            inbound, outbound = fetch_metra_trains(station["id"], station["line"])
+        
+        # Store in station cache
+        station_cache[station_index] = {
+            "inbound": inbound,
+            "outbound": outbound,
+            "last_update": time.time()
+        }
         
         # Update status
-        if len(line1_inbound) > 0 or len(line1_outbound) > 0:
+        if len(inbound) > 0 or len(outbound) > 0:
             api_error = False
             last_successful_update = time.time()
             cached_trains_available = True
@@ -1190,8 +1255,8 @@ def detect_transit_type(line_code):
     if not line_code:
         return "metra"  # Default to Metra
     
-    # CTA line codes
-    cta_lines = ["Red", "Blue", "Brn", "G", "Org", "P", "Pink", "Y"]
+    # CTA line codes (support both short codes and full names)
+    cta_lines = ["Red", "Blue", "Brn", "Brown", "G", "Green", "Org", "Orange", "P", "Purple", "Pink", "Y", "Yellow"]
     
     if line_code in cta_lines:
         return "cta"
@@ -1204,16 +1269,46 @@ def fetch_trains():
     global api_error, last_successful_update, cached_trains_available, wifi_connected
     
     if not wifi_connected:
-        print("No WiFi connection")
         return
     
-    # In station rotation mode, fetch for current station
+    # Skip API calls during typical no-service hours (1:30 AM - 4:30 AM)
+    # UNLESS user is tracking Red or Blue line (24/7 service)
+    # CTA Brown/most lines: no service ~1:30-4:00 AM
+    # Metra: no overnight service ~1:00-4:00 AM
+    from time import localtime
+    current_hour = localtime()[3]  # Hour in 24-hour format (0-23)
+    current_minute = localtime()[4]
+    
+    # Check if user has Red or Blue line configured (24/7 service)
+    has_24hr_service = False
     if station_rotation_enabled:
-        fetch_trains_for_station(current_station_index)
+        # Check all stations in rotation
+        for station in ROTATION_STATIONS:
+            line = station.get('line', '').upper()
+            if line in ['RED', 'BLUE']:
+                has_24hr_service = True
+                break
+    else:
+        # Check primary and secondary lines
+        line1_upper = LINE_1.upper() if LINE_1 else ''
+        line2_upper = LINE_2.upper() if LINE_2 else ''
+        if 'RED' in line1_upper or 'BLUE' in line1_upper or 'RED' in line2_upper or 'BLUE' in line2_upper:
+            has_24hr_service = True
+    
+    # Skip API calls during overnight hours if no 24/7 lines configured
+    if not has_24hr_service:
+        # Skip if between 1:30 AM and 4:30 AM
+        if (current_hour == 1 and current_minute >= 30) or (current_hour in [2, 3]) or (current_hour == 4 and current_minute < 30):
+            print("Skipping API call during no-service hours (1:30-4:30 AM)")
+            return
+    
+    # In station rotation mode, fetch for all stations
+    if station_rotation_enabled:
+        for i in range(len(ROTATION_STATIONS)):
+            fetch_trains_for_station(i)
         return
     
     try:
-        print("Fetching train data...")
         
         # Detect transit type for LINE_1
         line1_type = detect_transit_type(LINE_1)
@@ -1245,15 +1340,6 @@ def fetch_trains():
             api_error = False
             last_successful_update = time.time()
             cached_trains_available = True
-            print(f"Found trains for {LINE_1}")
-        else:
-            print(f"No trains found for {LINE_1}")
-        
-        if dual_line_mode:
-            if len(line2_inbound) > 0 or len(line2_outbound) > 0:
-                print(f"Found trains for {LINE_2}")
-            else:
-                print(f"No trains found for {LINE_2}")
 
     except Exception as e:
         api_error = True
@@ -1606,13 +1692,28 @@ def draw_display():
 
 def draw_single_line_display():
     """Draw display for single line (full screen 128x64)"""
-    # Header - Station name with line color
-    line_color = get_line_color(LINE_1)
-    display.set_pen(line_color)
-    display.text(STATION_STOP_ID, 5, 2, scale=2)
+    # Get trains based on mode
+    if station_rotation_enabled:
+        # Station rotation mode: get from cache
+        if current_station_index in station_cache:
+            cache = station_cache[current_station_index]
+            trains = cache["inbound"] if current_direction == "Inbound" else cache["outbound"]
+            station = ROTATION_STATIONS[current_station_index]
+            station_name = station['name']
+            line_color = get_line_color(station['line'])
+        else:
+            trains = []
+            station_name = "Loading..."
+            line_color = COLOR_WHITE
+    else:
+        # Single line mode
+        trains = line1_inbound if current_direction == "Inbound" else line1_outbound
+        station_name = STATION_STOP_ID
+        line_color = get_line_color(LINE_1)
     
-    # Get trains for current direction
-    trains = line1_inbound if current_direction == "Inbound" else line1_outbound
+    # Header - Station name with line color
+    display.set_pen(line_color)
+    display.text(station_name, 5, 2, scale=2)
     
     if len(trains) == 0:
         display.set_pen(COLOR_WHITE)
@@ -1638,8 +1739,8 @@ def draw_single_line_display():
             display.text(train_text, 2, y, scale=1)
         
         # Time on the right
-        time_text = format_time(train.minutes)
-        time_color = get_time_color(train.minutes)
+        time_text = format_time(train.get_minutes())
+        time_color = get_time_color(train.get_minutes())
         
         display.set_pen(time_color)
         time_x = 128 - (len(time_text) * 6) - 5
@@ -1667,8 +1768,8 @@ def draw_dual_line_display():
             display.set_pen(COLOR_WHITE)
             display.text(train_text, 2, 10, scale=1)
         
-        time_text = format_time(train.minutes)
-        time_color = get_time_color(train.minutes)
+        time_text = format_time(train.get_minutes())
+        time_color = get_time_color(train.get_minutes())
         display.set_pen(time_color)
         time_x = 128 - (len(time_text) * 6) - 5
         display.text(time_text, time_x, 10, scale=1)
@@ -1701,8 +1802,8 @@ def draw_dual_line_display():
             display.set_pen(COLOR_WHITE)
             display.text(train_text, 2, 43, scale=1)
         
-        time_text = format_time(train.minutes)
-        time_color = get_time_color(train.minutes)
+        time_text = format_time(train.get_minutes())
+        time_color = get_time_color(train.get_minutes())
         display.set_pen(time_color)
         time_x = 128 - (len(time_text) * 6) - 5
         display.text(time_text, time_x, 43, scale=1)
@@ -1807,10 +1908,16 @@ async def main_loop():
     except:
         print("Version: unknown")
     
+    # Debug: Show rotation mode config
+    print(f"ROTATION_MODE config: '{ROTATION_MODE}'")
+    print(f"ROTATION_STATIONS count: {len(ROTATION_STATIONS)}")
+    print(f"Station rotation enabled: {station_rotation_enabled}")
+    
     if station_rotation_enabled:
         print(f"Mode: Station Rotation ({len(ROTATION_STATIONS)} stations)")
         for i, station in enumerate(ROTATION_STATIONS):
-            print(f"  {i+1}. {station['name']} - {station['line']} ({station['transit_type']})")
+            transit_type = station.get('transit_type', 'metra')
+            print(f"  {i+1}. {station['name']} - {station['line']} ({transit_type})")
     else:
         print(f"Mode: Direction Rotation")
         print(f"Station: {STATION_STOP_ID}")
@@ -1857,7 +1964,7 @@ async def main_loop():
         config_server = socket.socket()
         config_server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         config_server.bind(('0.0.0.0', 80))
-        config_server.listen(1)
+        config_server.listen(5)  # Increased backlog from 1 to 5
         config_server.setblocking(False)
         wlan = network.WLAN(network.STA_IF)
         print(f"\nConfig portal available at http://{wlan.ifconfig()[0]}")
@@ -1897,10 +2004,9 @@ async def main_loop():
             if config_server:
                 try:
                     cl, addr = config_server.accept()
-                    cl.settimeout(10.0)  # 10 seconds is plenty for API requests
+                    cl.settimeout(5.0)  # Reduced from 10 to 5 seconds
                     try:
                         request = cl.recv(2048).decode('utf-8')
-                        print(f"Request: {request[:60]}...")
                         
                         if 'GET / ' in request or 'GET /config' in request:
                             # Read version for CDN cache busting
@@ -1951,7 +2057,30 @@ async def main_loop():
                             # Parse JSON body and save config
                             import config_portal
                             import json
-                            body = request.split('\r\n\r\n', 1)[1] if '\r\n\r\n' in request else '{}'
+                            
+                            # Extract Content-Length to know how much to read
+                            content_length = 0
+                            for line in request.split('\r\n'):
+                                if line.startswith('Content-Length:'):
+                                    content_length = int(line.split(':')[1].strip())
+                                    break
+                            
+                            # Get the body
+                            body_start = request.find('\r\n\r\n')
+                            if body_start >= 0:
+                                body = request[body_start + 4:]
+                                # Read more data if body is incomplete
+                                while len(body) < content_length:
+                                    try:
+                                        chunk = cl.recv(1024).decode('utf-8')
+                                        if not chunk:
+                                            break
+                                        body += chunk
+                                    except:
+                                        break
+                            else:
+                                body = '{}'
+                            
                             try:
                                 data = json.loads(body)
                                 # Convert JSON to form params format
@@ -1966,15 +2095,15 @@ async def main_loop():
                                 params['wifi_ssid'] = WIFI_SSID
                                 params['wifi_password'] = WIFI_PASSWORD
                                 if config_portal.save_config(params):
-                                    cl.send('HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n{"success":true}')
+                                    cl.send('HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n{"success":true}')
                                     cl.close()
                                     import sys
                                     sys.exit()
                                 else:
-                                    cl.send('HTTP/1.1 500 Error\r\nContent-Type: application/json\r\n\r\n{"success":false}')
+                                    cl.send('HTTP/1.1 500 Error\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n{"success":false}')
                             except Exception as e:
                                 print(f"Save error: {e}")
-                                cl.send('HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\n\r\n{"error":"' + str(e) + '"}')
+                                cl.send('HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n{"error":"' + str(e) + '"}')
                                 
                         elif 'OPTIONS ' in request:
                             # Handle CORS preflight
@@ -2001,7 +2130,6 @@ async def main_loop():
             # Check WiFi connection periodically
             wlan = network.WLAN(network.STA_IF)
             if not wlan.isconnected():
-                print("WiFi disconnected, attempting reconnect...")
                 connect_wifi()
             
             # Update train data from API
@@ -2044,7 +2172,7 @@ async def main_loop():
                             # After alerts, move to next station
                             current_direction = "Inbound"
                             current_station_index = (current_station_index + 1) % len(ROTATION_STATIONS)
-                            fetch_trains_for_station(current_station_index)
+                            # Train data will be fetched on next UPDATE_INTERVAL
                     else:
                         # No alerts: Inbound -> Outbound -> next station
                         if current_direction == "Inbound":
@@ -2053,7 +2181,7 @@ async def main_loop():
                             # After outbound, move to next station
                             current_direction = "Inbound"
                             current_station_index = (current_station_index + 1) % len(ROTATION_STATIONS)
-                            fetch_trains_for_station(current_station_index)
+                            # Train data will be fetched on next UPDATE_INTERVAL
                     
                     station = ROTATION_STATIONS[current_station_index]
                     print(f"Station: {station['name']} - {current_direction}")
