@@ -2009,12 +2009,8 @@ async def main_loop():
                         request = cl.recv(2048).decode('utf-8')
                         
                         if 'GET / ' in request or 'GET /config' in request:
-                            # Read version for CDN cache busting
-                            try:
-                                with open('version.txt', 'r') as vf:
-                                    ver = vf.read().strip()
-                            except:
-                                ver = '1.0.0'
+                            # Use main branch for CDN - always gets latest
+                            ver = 'main'
                             # Serve tiny loader HTML that pulls JS/CSS from CDN
                             loader = f'''<!DOCTYPE html>
 <html><head>
@@ -2022,11 +2018,11 @@ async def main_loop():
 <meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
 <title>Transit Board</title>
 <meta name="apple-mobile-web-app-capable" content="yes">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/sammcanany/ChicagoTransitBoard@v{ver}/web/styles.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/sammcanany/ChicagoTransitBoard@{ver}/web/styles.css">
 <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
 </head><body>
 <div id="app"><div class="loading">Loading...</div></div>
-<script src="https://cdn.jsdelivr.net/gh/sammcanany/ChicagoTransitBoard@v{ver}/web/config.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/sammcanany/ChicagoTransitBoard@{ver}/web/config.js"></script>
 </body></html>'''
                             cl.send('HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n')
                             cl.send(loader)

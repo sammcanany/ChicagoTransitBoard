@@ -146,12 +146,12 @@
                 <div class="header">
                     <div class="header-title">Settings</div>
                 </div>
-                <div class="status-card">
+                <div class="status-card" id="status-card">
                     <div class="status-grid">
-                        <div class="status-item"><div class="status-label">Status</div><div class="status-value ${s.wifi_connected?'online':''}">${s.wifi_connected?'Online':'Offline'}</div></div>
-                        <div class="status-item"><div class="status-label">Version</div><div class="status-value">${s.version||'?'}</div></div>
-                        <div class="status-item"><div class="status-label">Uptime</div><div class="status-value">${s.uptime||'0m'}</div></div>
-                        <div class="status-item"><div class="status-label">Memory</div><div class="status-value">${s.memory_pct||0}%</div></div>
+                        <div class="status-item"><div class="status-label">Status</div><div class="status-value ${s.wifi_connected?'online':''}" id="status-wifi">${s.wifi_connected?'Online':'Offline'}</div></div>
+                        <div class="status-item"><div class="status-label">Version</div><div class="status-value" id="status-version">${s.version||'?'}</div></div>
+                        <div class="status-item"><div class="status-label">Uptime</div><div class="status-value" id="status-uptime">${s.uptime||'0m'}</div></div>
+                        <div class="status-item"><div class="status-label">Memory</div><div class="status-value" id="status-memory">${s.memory_pct||0}%</div></div>
                     </div>
                 </div>
                 <div class="menu-list">
@@ -662,6 +662,30 @@
         if (v) { const p = v.split('|'); document.getElementById('station' + num + '_station_id').value = p[0]; }
     }
 
+    async function updateStatus() {
+        try {
+            const res = await fetchWithRetry('/api/status');
+            const s = await res.json();
+            
+            // Update status display only if on main page
+            const wifiEl = document.getElementById('status-wifi');
+            if (wifiEl) {
+                wifiEl.textContent = s.wifi_connected ? 'Online' : 'Offline';
+                wifiEl.className = 'status-value' + (s.wifi_connected ? ' online' : '');
+            }
+            const versionEl = document.getElementById('status-version');
+            if (versionEl) versionEl.textContent = s.version || '?';
+            
+            const uptimeEl = document.getElementById('status-uptime');
+            if (uptimeEl) uptimeEl.textContent = s.uptime || '0m';
+            
+            const memoryEl = document.getElementById('status-memory');
+            if (memoryEl) memoryEl.textContent = (s.memory_pct || 0) + '%';
+        } catch(e) {
+            console.log('Status update failed:', e);
+        }
+    }
+
     async function save() {
         const data = {};
         // Only send non-empty values and checkboxes that are checked
@@ -682,6 +706,9 @@
             else throw new Error('Save failed');
         } catch(e) { alert('Error: ' + e.message); }
     }
+
+    // Auto-update status every 30 seconds
+    setInterval(updateStatus, 30000);
 
     window.TC = { 
         nav, back, 
