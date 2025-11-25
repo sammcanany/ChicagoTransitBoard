@@ -89,30 +89,53 @@
 
     document.addEventListener('DOMContentLoaded', init);
 
-    // Fetch with retry logic
-    async function fetchWithRetry(url, retries = 3, delay = 500) {
-        for (let i = 0; i < retries; i++) {
+    // Aggressive fetch with exponential backoff retry logic
+    async function fetchWithRetry(url, maxRetries = 10) {
+        let lastError;
+        
+        for (let attempt = 0; attempt < maxRetries; attempt++) {
             try {
-                const res = await fetch(url);
-                if (res.ok) return res;
+                // Exponential backoff: 200ms, 400ms, 800ms, 1600ms, 3200ms, etc.
+                if (attempt > 0) {
+                    const delay = Math.min(200 * Math.pow(2, attempt - 1), 5000); // Cap at 5 seconds
+                    await new Promise(r => setTimeout(r, delay));
+                }
+                
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+                
+                const res = await fetch(url, { 
+                    signal: controller.signal,
+                    cache: 'no-cache'
+                });
+                
+                clearTimeout(timeoutId);
+                
+                if (res.ok) {
+                    return res;
+                }
+                
+                lastError = new Error(`HTTP ${res.status}`);
             } catch (e) {
-                if (i === retries - 1) throw e;
+                lastError = e;
+                console.log(`Fetch attempt ${attempt + 1}/${maxRetries} failed:`, e.message);
             }
-            await new Promise(r => setTimeout(r, delay));
         }
-        throw new Error('Failed after retries');
+        
+        throw lastError || new Error('Failed after retries');
     }
 
     async function init() {
         try {
             document.getElementById('app').innerHTML = '<div class="loading">Loading configuration...</div>';
             
-            // Fetch sequentially (board can't handle parallel requests well)
+            // Fetch sequentially with longer delay between requests
+            // Board can't handle simultaneous requests reliably
             const configRes = await fetchWithRetry('/api/config');
             config = await configRes.json();
             
-            // Small delay between requests
-            await new Promise(r => setTimeout(r, 100));
+            // Longer delay between requests to ensure board is ready
+            await new Promise(r => setTimeout(r, 500));
             
             const statusRes = await fetchWithRetry('/api/status');
             status = await statusRes.json();
