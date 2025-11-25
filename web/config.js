@@ -89,16 +89,32 @@
 
     document.addEventListener('DOMContentLoaded', init);
 
+    // Fetch with retry logic
+    async function fetchWithRetry(url, retries = 3, delay = 500) {
+        for (let i = 0; i < retries; i++) {
+            try {
+                const res = await fetch(url);
+                if (res.ok) return res;
+            } catch (e) {
+                if (i === retries - 1) throw e;
+            }
+            await new Promise(r => setTimeout(r, delay));
+        }
+        throw new Error('Failed after retries');
+    }
+
     async function init() {
         try {
             document.getElementById('app').innerHTML = '<div class="loading">Loading configuration...</div>';
             
-            const [configRes, statusRes] = await Promise.all([
-                fetch('/api/config'),
-                fetch('/api/status')
-            ]);
-            
+            // Fetch sequentially (board can't handle parallel requests well)
+            const configRes = await fetchWithRetry('/api/config');
             config = await configRes.json();
+            
+            // Small delay between requests
+            await new Promise(r => setTimeout(r, 100));
+            
+            const statusRes = await fetchWithRetry('/api/status');
             status = await statusRes.json();
             
             render();
