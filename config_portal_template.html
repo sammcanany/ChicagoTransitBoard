@@ -780,9 +780,9 @@
                 
                 <div class="form-group">
                     <label>Transit Type</label>
-                    <select id="station1_transit_type" onchange="updateLineOptions('station1')">
-                        <option value="metra">Metra</option>
-                        <option value="cta">CTA</option>
+                    <select id="station1_transit_type" name="station1_transit_type" onchange="updateLineOptions('station1')">
+                        <option value="metra" {{STATION1_TRANSIT_TYPE_METRA_SELECTED}}>Metra</option>
+                        <option value="cta" {{STATION1_TRANSIT_TYPE_CTA_SELECTED}}>CTA</option>
                     </select>
                 </div>
 
@@ -835,8 +835,8 @@
                     </select>
                 </div>
 
-                <input type="hidden" id="station1_line_id" name="station1_line_id">
-                <input type="hidden" id="station1_station_id" name="station1_station_id">
+                <input type="hidden" id="station1_line_id" name="station1_line_id" value="{{STATION1_LINE_ID}}">
+                <input type="hidden" id="station1_station_id" name="station1_station_id" value="{{STATION1_STATION_ID}}">
             </div>
 
             <div class="form-section">
@@ -844,9 +844,9 @@
                 
                 <div class="form-group">
                     <label>Transit Type</label>
-                    <select id="station2_transit_type" onchange="updateLineOptions('station2')">
-                        <option value="metra">Metra</option>
-                        <option value="cta">CTA</option>
+                    <select id="station2_transit_type" name="station2_transit_type" onchange="updateLineOptions('station2')">
+                        <option value="metra" {{STATION2_TRANSIT_TYPE_METRA_SELECTED}}>Metra</option>
+                        <option value="cta" {{STATION2_TRANSIT_TYPE_CTA_SELECTED}}>CTA</option>
                     </select>
                 </div>
 
@@ -899,8 +899,8 @@
                     </select>
                 </div>
 
-                <input type="hidden" id="station2_line_id" name="station2_line_id">
-                <input type="hidden" id="station2_station_id" name="station2_station_id">
+                <input type="hidden" id="station2_line_id" name="station2_line_id" value="{{STATION2_LINE_ID}}">
+                <input type="hidden" id="station2_station_id" name="station2_station_id" value="{{STATION2_STATION_ID}}">
             </div>
 
             <div class="form-section">
@@ -908,9 +908,9 @@
                 
                 <div class="form-group">
                     <label>Transit Type</label>
-                    <select id="station3_transit_type" onchange="updateLineOptions('station3')">
-                        <option value="metra">Metra</option>
-                        <option value="cta">CTA</option>
+                    <select id="station3_transit_type" name="station3_transit_type" onchange="updateLineOptions('station3')">
+                        <option value="metra" {{STATION3_TRANSIT_TYPE_METRA_SELECTED}}>Metra</option>
+                        <option value="cta" {{STATION3_TRANSIT_TYPE_CTA_SELECTED}}>CTA</option>
                     </select>
                 </div>
 
@@ -963,8 +963,8 @@
                     </select>
                 </div>
 
-                <input type="hidden" id="station3_line_id" name="station3_line_id">
-                <input type="hidden" id="station3_station_id" name="station3_station_id">
+                <input type="hidden" id="station3_line_id" name="station3_line_id" value="{{STATION3_LINE_ID}}">
+                <input type="hidden" id="station3_station_id" name="station3_station_id" value="{{STATION3_STATION_ID}}">
             </div>
 
             <div class="help-text" style="text-align: center; padding: 20px; color: #666;">
@@ -1544,6 +1544,49 @@
                     if (secondaryLineSelect.options[i].value === secondaryLineValue || secondaryLineSelect.options[i].value.startsWith(secondaryLineId + '|')) {
                         secondaryLineSelect.selectedIndex = i;
                         break;
+                    }
+                }
+            }
+            
+            // Station rotation values
+            for (var stationNum = 1; stationNum <= 3; stationNum++) {
+                var stationLineId = document.getElementById('station' + stationNum + '_line_id');
+                var stationStationId = document.getElementById('station' + stationNum + '_station_id');
+                
+                if (!stationLineId || !stationStationId) continue;
+                
+                var lineIdVal = stationLineId.value;
+                var stationIdVal = stationStationId.value;
+                
+                if (!lineIdVal || !stationIdVal) continue;
+                
+                // Update transit type dropdown (already handled by template placeholders)
+                var transitTypeSelect = document.getElementById('station' + stationNum + '_transit_type');
+                if (transitTypeSelect) {
+                    updateLineOptions('station' + stationNum);
+                }
+                
+                // Set line dropdown
+                var lineSelect = document.getElementById('station' + stationNum + '_line_select');
+                if (lineSelect && lineIdVal) {
+                    for (var i = 0; i < lineSelect.options.length; i++) {
+                        if (lineSelect.options[i].value.startsWith(lineIdVal + '|')) {
+                            lineSelect.selectedIndex = i;
+                            updateStationLine(stationNum);
+                            break;
+                        }
+                    }
+                }
+                
+                // Set station dropdown
+                var stationSelect = document.getElementById('station' + stationNum + '_station_select');
+                if (stationSelect && stationIdVal) {
+                    for (var i = 0; i < stationSelect.options.length; i++) {
+                        if (stationSelect.options[i].value.startsWith(stationIdVal + '|')) {
+                            stationSelect.selectedIndex = i;
+                            updateStationInfo(stationNum);
+                            break;
+                        }
                     }
                 }
             }

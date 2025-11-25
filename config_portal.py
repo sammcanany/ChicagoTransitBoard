@@ -43,7 +43,7 @@ def get_current_config():
     """Read current config.py settings"""
     try:
         import config
-        return {
+        result = {
             'wifi_ssid': getattr(config, 'WIFI_SSID', ''),
             'metra_token': getattr(config, 'METRA_API_TOKEN', ''),
             'cta_token': getattr(config, 'CTA_API_KEY', ''),
@@ -89,6 +89,11 @@ def get_current_config():
         for i, station in enumerate(rotation_stations[:3], 1):  # Up to 3 stations
             result[f'station{i}_station_id'] = station.get('id', '')
             result[f'station{i}_line_id'] = station.get('line', '')
+            # Detect transit type from line code if not in station dict
+            transit_type = station.get('transit_type', '')
+            if not transit_type:
+                transit_type = detect_transit_type(station.get('line', ''))
+            result[f'station{i}_transit_type'] = transit_type
         
         return result
     except ImportError:
@@ -247,6 +252,20 @@ def config_page(error='', success=''):
         '{{WEATHER_30MIN_SELECTED}}': 'selected' if config.get('weather_update_interval', 1800) == 1800 else '',
         '{{WEATHER_60MIN_SELECTED}}': 'selected' if config.get('weather_update_interval', 1800) == 3600 else '',
         
+        # Station rotation settings (v1.4.0)
+        '{{STATION1_TRANSIT_TYPE_METRA_SELECTED}}': 'selected' if config.get('station1_transit_type', 'metra') == 'metra' else '',
+        '{{STATION1_TRANSIT_TYPE_CTA_SELECTED}}': 'selected' if config.get('station1_transit_type', 'metra') == 'cta' else '',
+        '{{STATION1_LINE_ID}}': str(config.get('station1_line_id') or ''),
+        '{{STATION1_STATION_ID}}': str(config.get('station1_station_id') or ''),
+        '{{STATION2_TRANSIT_TYPE_METRA_SELECTED}}': 'selected' if config.get('station2_transit_type', 'metra') == 'metra' else '',
+        '{{STATION2_TRANSIT_TYPE_CTA_SELECTED}}': 'selected' if config.get('station2_transit_type', 'metra') == 'cta' else '',
+        '{{STATION2_LINE_ID}}': str(config.get('station2_line_id') or ''),
+        '{{STATION2_STATION_ID}}': str(config.get('station2_station_id') or ''),
+        '{{STATION3_TRANSIT_TYPE_METRA_SELECTED}}': 'selected' if config.get('station3_transit_type', 'metra') == 'metra' else '',
+        '{{STATION3_TRANSIT_TYPE_CTA_SELECTED}}': 'selected' if config.get('station3_transit_type', 'metra') == 'cta' else '',
+        '{{STATION3_LINE_ID}}': str(config.get('station3_line_id') or ''),
+        '{{STATION3_STATION_ID}}': str(config.get('station3_station_id') or ''),
+        
         # System settings
         '{{WATCHDOG_CHECKED}}': 'checked' if config.get('enable_watchdog', True) else '',
         '{{WATCHDOG_5S_SELECTED}}': 'selected' if config.get('watchdog_timeout', 8000) == 5000 else '',
@@ -368,9 +387,8 @@ ROTATION_MODE = "{params.get('rotation_mode', 'direction')}"  # "direction" or "
         for i in range(1, 4):  # Support up to 3 stations
             station_id = params.get(f'station{i}_station_id')
             line_id = params.get(f'station{i}_line_id')
-            if station_id and line_id:
-                # Detect transit type based on line code
-                transit_type = detect_transit_type(line_id)
+            transit_type = params.get(f'station{i}_transit_type')  # Get from form data
+            if station_id and line_id and transit_type:
                 # Get station name from the station_id (format is usually descriptive)
                 station_name = station_id  # Use ID as name for now
                 stations.append(f'    {{"name": "{station_name}", "id": "{station_id}", "line": "{line_id}", "transit_type": "{transit_type}"}}')
