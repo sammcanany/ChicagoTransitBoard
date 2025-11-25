@@ -334,16 +334,16 @@
                             <label>Line</label>
                             <select id="station1_line_select" onchange="TC.updateStationLine(1)">
                                 <option value="">-- Select --</option>
-                                <optgroup label="Metra" id="metra_lines_station1">${buildLineOptions(c.station1_line_id, 'metra')}</optgroup>
-                                <optgroup label="CTA" id="cta_lines_station1" style="display:none">${buildLineOptions(c.station1_line_id, 'cta')}</optgroup>
+                                <optgroup label="Metra" id="metra_lines_station1" ${c.station1_transit_type==='cta'?'style="display:none"':''}>${buildLineOptions(c.station1_line_id, 'metra')}</optgroup>
+                                <optgroup label="CTA" id="cta_lines_station1" ${c.station1_transit_type==='cta'?'':'style="display:none"'}>${buildLineOptions(c.station1_line_id, 'cta')}</optgroup>
                             </select>
                         </div>
                         <div class="form-group">
                             <label>Station</label>
                             <select id="station1_station_select" onchange="TC.updateStationInfo(1)">
                                 <option value="">-- Select --</option>
-                                <optgroup label="Metra" id="metra_stations_station1">${buildStationOptions(c.station1_station_id, 'metra')}</optgroup>
-                                <optgroup label="CTA" id="cta_stations_station1" style="display:none">${buildStationOptions(c.station1_station_id, 'cta')}</optgroup>
+                                <optgroup label="Metra" id="metra_stations_station1" ${c.station1_transit_type==='cta'?'style="display:none"':''}>${buildStationOptions(c.station1_station_id, 'metra')}</optgroup>
+                                <optgroup label="CTA" id="cta_stations_station1" ${c.station1_transit_type==='cta'?'':'style="display:none"'}>${buildStationOptions(c.station1_station_id, 'cta')}</optgroup>
                             </select>
                         </div>
                         <input type="hidden" id="station1_line_id" value="${c.station1_line_id||''}">
@@ -362,16 +362,16 @@
                             <label>Line</label>
                             <select id="station2_line_select" onchange="TC.updateStationLine(2)">
                                 <option value="">-- Select --</option>
-                                <optgroup label="Metra" id="metra_lines_station2">${buildLineOptions(c.station2_line_id, 'metra')}</optgroup>
-                                <optgroup label="CTA" id="cta_lines_station2" style="display:none">${buildLineOptions(c.station2_line_id, 'cta')}</optgroup>
+                                <optgroup label="Metra" id="metra_lines_station2" ${c.station2_transit_type==='cta'?'style="display:none"':''}>${buildLineOptions(c.station2_line_id, 'metra')}</optgroup>
+                                <optgroup label="CTA" id="cta_lines_station2" ${c.station2_transit_type==='cta'?'':'style="display:none"'}>${buildLineOptions(c.station2_line_id, 'cta')}</optgroup>
                             </select>
                         </div>
                         <div class="form-group">
                             <label>Station</label>
                             <select id="station2_station_select" onchange="TC.updateStationInfo(2)">
                                 <option value="">-- Select --</option>
-                                <optgroup label="Metra" id="metra_stations_station2">${buildStationOptions(c.station2_station_id, 'metra')}</optgroup>
-                                <optgroup label="CTA" id="cta_stations_station2" style="display:none">${buildStationOptions(c.station2_station_id, 'cta')}</optgroup>
+                                <optgroup label="Metra" id="metra_stations_station2" ${c.station2_transit_type==='cta'?'style="display:none"':''}>${buildStationOptions(c.station2_station_id, 'metra')}</optgroup>
+                                <optgroup label="CTA" id="cta_stations_station2" ${c.station2_transit_type==='cta'?'':'style="display:none"'}>${buildStationOptions(c.station2_station_id, 'cta')}</optgroup>
                             </select>
                         </div>
                         <input type="hidden" id="station2_line_id" value="${c.station2_line_id||''}">
@@ -390,16 +390,16 @@
                             <label>Line</label>
                             <select id="station3_line_select" onchange="TC.updateStationLine(3)">
                                 <option value="">-- Select --</option>
-                                <optgroup label="Metra" id="metra_lines_station3">${buildLineOptions(c.station3_line_id, 'metra')}</optgroup>
-                                <optgroup label="CTA" id="cta_lines_station3" style="display:none">${buildLineOptions(c.station3_line_id, 'cta')}</optgroup>
+                                <optgroup label="Metra" id="metra_lines_station3" ${c.station3_transit_type==='cta'?'style="display:none"':''}>${buildLineOptions(c.station3_line_id, 'metra')}</optgroup>
+                                <optgroup label="CTA" id="cta_lines_station3" ${c.station3_transit_type==='cta'?'':'style="display:none"'}>${buildLineOptions(c.station3_line_id, 'cta')}</optgroup>
                             </select>
                         </div>
                         <div class="form-group">
                             <label>Station</label>
                             <select id="station3_station_select" onchange="TC.updateStationInfo(3)">
                                 <option value="">-- Select --</option>
-                                <optgroup label="Metra" id="metra_stations_station3">${buildStationOptions(c.station3_station_id, 'metra')}</optgroup>
-                                <optgroup label="CTA" id="cta_stations_station3" style="display:none">${buildStationOptions(c.station3_station_id, 'cta')}</optgroup>
+                                <optgroup label="Metra" id="metra_stations_station3" ${c.station3_transit_type==='cta'?'style="display:none"':''}>${buildStationOptions(c.station3_station_id, 'metra')}</optgroup>
+                                <optgroup label="CTA" id="cta_stations_station3" ${c.station3_transit_type==='cta'?'':'style="display:none"'}>${buildStationOptions(c.station3_station_id, 'cta')}</optgroup>
                             </select>
                         </div>
                         <input type="hidden" id="station3_line_id" value="${c.station3_line_id||''}">
