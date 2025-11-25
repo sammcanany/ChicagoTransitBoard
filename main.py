@@ -2018,6 +2018,7 @@ async def main_loop():
 <meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
 <title>Transit Board</title>
 <meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="apple-touch-icon" href="https://cdn.jsdelivr.net/gh/sammcanany/ChicagoTransitBoard@{ver}/web/apple-touch-icon.png">
 <link rel="icon" type="image/svg+xml" href="https://cdn.jsdelivr.net/gh/sammcanany/ChicagoTransitBoard@{ver}/web/favicon.svg">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/sammcanany/ChicagoTransitBoard@{ver}/web/styles.css">
 <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
