@@ -1324,28 +1324,56 @@
 
         function updateLineOptions(which) {
             var transitType = document.getElementById(which + '_transit_type').value;
-            var metraLineGroup = document.getElementById(which === 'primary' ? 'metra_lines_primary' : 'metra_lines_secondary');
-            var ctaLineGroup = document.getElementById(which === 'primary' ? 'cta_lines_primary' : 'cta_lines_secondary');
-            var metraStationGroup = document.getElementById(which === 'primary' ? 'metra_stations_primary' : 'metra_stations_secondary');
-            var ctaStationGroup = document.getElementById(which === 'primary' ? 'cta_stations_primary' : 'cta_stations_secondary');
+            
+            // Determine which line/station groups to use based on 'which' parameter
+            var metraLineGroupId, ctaLineGroupId, metraStationGroupId, ctaStationGroupId, lineSelectId, stationSelectId;
+            
+            if (which === 'primary') {
+                metraLineGroupId = 'metra_lines_primary';
+                ctaLineGroupId = 'cta_lines_primary';
+                metraStationGroupId = 'metra_stations_primary';
+                ctaStationGroupId = 'cta_stations_primary';
+                lineSelectId = 'line_select';
+                stationSelectId = 'primary_station_select';
+            } else if (which === 'secondary') {
+                metraLineGroupId = 'metra_lines_secondary';
+                ctaLineGroupId = 'cta_lines_secondary';
+                metraStationGroupId = 'metra_stations_secondary';
+                ctaStationGroupId = 'cta_stations_secondary';
+                lineSelectId = 'secondary_line_select';
+                stationSelectId = 'secondary_station_select';
+            } else if (which.startsWith('station')) {
+                // For station rotation (station1, station2, station3)
+                metraLineGroupId = 'metra_lines_' + which;
+                ctaLineGroupId = 'cta_lines_' + which;
+                metraStationGroupId = 'metra_stations_' + which;
+                ctaStationGroupId = 'cta_stations_' + which;
+                lineSelectId = which + '_line_select';
+                stationSelectId = which + '_station_select';
+            }
+            
+            var metraLineGroup = document.getElementById(metraLineGroupId);
+            var ctaLineGroup = document.getElementById(ctaLineGroupId);
+            var metraStationGroup = document.getElementById(metraStationGroupId);
+            var ctaStationGroup = document.getElementById(ctaStationGroupId);
 
             if (transitType === 'metra') {
-                metraLineGroup.style.display = '';
-                ctaLineGroup.style.display = 'none';
-                metraStationGroup.style.display = '';
-                ctaStationGroup.style.display = 'none';
+                if (metraLineGroup) metraLineGroup.style.display = '';
+                if (ctaLineGroup) ctaLineGroup.style.display = 'none';
+                if (metraStationGroup) metraStationGroup.style.display = '';
+                if (ctaStationGroup) ctaStationGroup.style.display = 'none';
             } else {
-                metraLineGroup.style.display = 'none';
-                ctaLineGroup.style.display = '';
-                metraStationGroup.style.display = 'none';
-                ctaStationGroup.style.display = '';
+                if (metraLineGroup) metraLineGroup.style.display = 'none';
+                if (ctaLineGroup) ctaLineGroup.style.display = '';
+                if (metraStationGroup) metraStationGroup.style.display = 'none';
+                if (ctaStationGroup) ctaStationGroup.style.display = '';
             }
 
-            // Reset selections
-            var lineSelect = document.getElementById(which === 'primary' ? 'line_select' : 'secondary_line_select');
-            var stationSelect = document.getElementById(which === 'primary' ? 'primary_station_select' : 'secondary_station_select');
-            lineSelect.selectedIndex = 0;
-            stationSelect.selectedIndex = 0;
+            // Reset selections only if not loading initial values
+            var lineSelect = document.getElementById(lineSelectId);
+            var stationSelect = document.getElementById(stationSelectId);
+            if (lineSelect) lineSelect.selectedIndex = 0;
+            if (stationSelect) stationSelect.selectedIndex = 0;
         }
 
         function updateLine() {
