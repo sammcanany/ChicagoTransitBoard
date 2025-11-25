@@ -710,8 +710,8 @@
         } catch(e) { alert('Error: ' + e.message); }
     }
 
-    // Auto-update status every 30 seconds
-    setInterval(updateStatus, 30000);
+    // Auto-update status every second for live stats
+    setInterval(updateStatus, 1000);
 
     window.TC = { 
         nav, back, 
