@@ -430,6 +430,35 @@ def run_server(port=80):
                             cl.close()
                             time.sleep(1)
                             machine.reset()
+                        
+                        elif path == '/check-update':
+                            # Trigger manual update check
+                            update_result = {"success": False, "message": "Update check not available"}
+                            try:
+                                import auto_update
+                                local_ver = auto_update.get_local_version()
+                                remote_ver = auto_update.get_remote_version()
+                                
+                                if remote_ver is None:
+                                    update_result = {"success": False, "message": "Could not fetch remote version"}
+                                elif auto_update.is_newer_version(remote_ver, local_ver):
+                                    # Update available - perform update
+                                    if auto_update.check_for_updates():
+                                        update_result = {"success": True, "message": f"Updated from {local_ver} to {remote_ver}! Restart to apply.", "updated": True}
+                                    else:
+                                        update_result = {"success": False, "message": "Update download failed"}
+                                else:
+                                    update_result = {"success": True, "message": f"Already up to date (v{local_ver})", "updated": False}
+                            except ImportError:
+                                update_result = {"success": False, "message": "Auto-update module not available"}
+                            except Exception as e:
+                                update_result = {"success": False, "message": f"Error: {str(e)}"}
+                            
+                            response_json = json.dumps(update_result)
+                            cl.send('HTTP/1.1 200 OK\r\n')
+                            cl.send('Content-Type: application/json\r\n')
+                            cl.send('Connection: close\r\n\r\n')
+                            cl.send(response_json)
                     
                     elif method == 'POST' and path == '/save':
                         # Find the body

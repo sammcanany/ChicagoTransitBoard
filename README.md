@@ -6,14 +6,14 @@ Real-time Metra and CTA train arrivals on a **Pimoroni Interstate 75 W** with HU
 
 ## Features
 
-- 🌐 **Web Configuration Portal** at http://board.local - no code editing needed
-- 📡 **WiFi Setup Portal** - creates its own network for first-time setup
-- 🚂 **Real-time Arrivals** - Metra GTFS-RT and CTA Train Tracker APIs
-- 🎨 **Line Colors** - Official brand colors for each transit line
-- ⚠️ **Service Alerts** - Shows disruptions with warning icons
-- 🌤️ **Weather Display** - Temperature and conditions (Weather.gov or OpenWeatherMap)
-- 🔄 **Auto-Update** - Downloads updates from GitHub automatically
-- 📱 **PWA Support** - Add to home screen on iOS for app-like experience
+- **Web Configuration Portal** at http://board.local - no code editing needed
+- **WiFi Setup Portal** - creates its own network for first-time setup
+- **Real-time Arrivals** - Metra GTFS-RT and CTA Train Tracker APIs
+- **Line Colors** - Official brand colors for each transit line
+- **Service Alerts** - Shows disruptions with warning icons
+- **Weather Display** - Temperature and conditions (Weather.gov or OpenWeatherMap)
+- **Auto-Update** - Downloads updates from GitHub automatically
+- **PWA Support** - Add to home screen on iOS for app-like experience
 
 ### Display Modes
 - **Single Line** - Full screen for one transit line

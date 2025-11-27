@@ -6,11 +6,11 @@ import time
 import network
 import os
 from machine import WDT
-from interstate75 import Interstate75, DISPLAY_INTERSTATE75_128X64
+from interstate75 import Interstate75, DISPLAY_INTERSTATE75_128X32
 
 # ===== INITIALIZE DISPLAY FIRST (needed for LED) =====
-# Interstate 75 W with 2x 64x32 panels = 128x64 display
-i75 = Interstate75(display=DISPLAY_INTERSTATE75_128X64)
+# Interstate 75 W with 2x 64x32 panels side-by-side = 128x32 display
+i75 = Interstate75(display=DISPLAY_INTERSTATE75_128X32)
 display = i75.display
 
 # Quick LED test on startup (before config loads)
@@ -197,6 +197,12 @@ try:
         ROTATION_MODE = "direction"  # Default to direction mode
         ROTATION_STATIONS = []
         STATION_ROTATION_TIME = 10
+    
+    # Timezone offset (hours from UTC, e.g., -6 for CST, -5 for CDT)
+    try:
+        from config import UTC_OFFSET
+    except ImportError:
+        UTC_OFFSET = -6  # Default to Chicago time (CST)
         
 except ImportError:
     print("\n" + "="*50)
@@ -288,7 +294,7 @@ def connect_wifi(silent=False):
     Args:
         silent: If True, don't update display (for background reconnection)
     """
-    global wifi_connected
+    global wifi_connected, mdns_server, mdns_client
 
     wlan = network.WLAN(network.STA_IF)
     wlan.active(True)
@@ -318,7 +324,6 @@ def connect_wifi(silent=False):
             print(f"NTP sync failed: {e}")
 
         # Start mDNS responder using micropython-mdns library
-        global mdns_server, mdns_client
         try:
             from mdns_client import Client
             from mdns_client.responder import Responder
@@ -333,6 +338,17 @@ def connect_wifi(silent=False):
             mdns_server.advertise("_http", "_tcp", port=80)
             print(f"mDNS ready: http://board.local or http://{ip}")
 
+        except ImportError:
+            # Library not installed - try to install it
+            print("mDNS library not found, installing...")
+            try:
+                import mip
+                mip.install("github:cbrand/micropython-mdns")
+                print("mDNS library installed! Restart to enable board.local")
+            except Exception as install_err:
+                print(f"Could not install mDNS library: {install_err}")
+            mdns_server = None
+            mdns_client = None
         except Exception as e:
             print(f"mDNS setup failed: {e}")
             mdns_server = None
@@ -380,7 +396,6 @@ def connect_wifi(silent=False):
             print(f"NTP sync failed: {e}")
 
         # Start mDNS responder using micropython-mdns library
-        global mdns_server, mdns_client
         try:
             from mdns_client import Client
             from mdns_client.responder import Responder
@@ -1276,8 +1291,10 @@ def fetch_trains():
     # CTA Brown/most lines: no service ~1:30-4:00 AM
     # Metra: no overnight service ~1:00-4:00 AM
     from time import localtime
-    current_hour = localtime()[3]  # Hour in 24-hour format (0-23)
+    utc_hour = localtime()[3]  # Hour in UTC (0-23)
     current_minute = localtime()[4]
+    # Apply timezone offset (NTP returns UTC, we need local time)
+    current_hour = (utc_hour + UTC_OFFSET) % 24
     
     # Check if user has Red or Blue line configured (24/7 service)
     has_24hr_service = False
@@ -1297,9 +1314,9 @@ def fetch_trains():
     
     # Skip API calls during overnight hours if no 24/7 lines configured
     if not has_24hr_service:
-        # Skip if between 1:30 AM and 4:30 AM
+        # Skip if between 1:30 AM and 4:30 AM local time
         if (current_hour == 1 and current_minute >= 30) or (current_hour in [2, 3]) or (current_hour == 4 and current_minute < 30):
-            print("Skipping API call during no-service hours (1:30-4:30 AM)")
+            print("Skipping API call during no-service hours (1:30-4:30 AM local)")
             return
     
     # In station rotation mode, fetch for all stations
@@ -1616,12 +1633,12 @@ def draw_weather_icon(x, y):
         display.pixel(x+3, y+2)
 
 def get_current_hour():
-    """Get current hour (0-23) from RTC or system time"""
-    # Note: You may need to sync time via NTP first
-    # For now, using system time (seconds since epoch)
-    # This assumes time is set correctly
+    """Get current hour (0-23) in local time with timezone offset"""
+    # NTP returns UTC, apply timezone offset for local time
     current_time = time.localtime()
-    return current_time[3]  # Hour component
+    utc_hour = current_time[3]  # Hour component in UTC
+    local_hour = (utc_hour + UTC_OFFSET) % 24
+    return local_hour
 
 def adjust_brightness():
     """Adjust display brightness based on sleep mode or adaptive brightness"""
@@ -1691,7 +1708,7 @@ def draw_display():
     i75.update()
 
 def draw_single_line_display():
-    """Draw display for single line (full screen 128x64)"""
+    """Draw display for single line (full screen 128x32)"""
     # Get trains based on mode
     if station_rotation_enabled:
         # Station rotation mode: get from cache
@@ -1711,19 +1728,27 @@ def draw_single_line_display():
         station_name = STATION_STOP_ID
         line_color = get_line_color(LINE_1)
     
-    # Header - Station name with line color
+    # Header - Station name with line color (smaller for 32px height)
     display.set_pen(line_color)
-    display.text(station_name, 5, 2, scale=2)
+    display.text(station_name, 2, 1, scale=1)
+    
+    # Direction indicator
+    display.set_pen(COLOR_WHITE)
+    dir_text = "In" if current_direction == "Inbound" else "Out"
+    display.text(dir_text, 100, 1, scale=1)
     
     if len(trains) == 0:
         display.set_pen(COLOR_WHITE)
-        display.text("No trains", 30, 30, scale=2)
+        display.text("No trains", 35, 15, scale=1)
+        i75.update()
+        print(f"Display: {station_name} {current_direction} - No trains")
         return
     
-    # Show up to 2 trains
-    y_start = 25
+    # Show up to 2 trains (adjusted for 32px height)
+    y_start = 12
+    print(f"Display: {station_name} {current_direction} - {len(trains)} trains")
     for i, train in enumerate(trains[:2]):
-        y = y_start + (i * 18)
+        y = y_start + (i * 10)
         
         # Format: "UP-N, Inbound" or "UP-N, Outbound"
         train_text = f"{train.route}, {train.direction}"
@@ -1747,69 +1772,71 @@ def draw_single_line_display():
         display.text(time_text, time_x, y, scale=1)
 
 def draw_dual_line_display():
-    """Draw display for two lines (split screen: 128x32 each)"""
-    # TOP HALF - Line 1
+    """Draw display for two lines (split screen for 128x32 - 16px each half)"""
+    # TOP HALF - Line 1 (y=0 to y=15)
     line1_color = get_line_color(LINE_1)
     display.set_pen(line1_color)
-    display.text(LINE_1, 2, 1, scale=1)
+    display.text(LINE_1, 2, 0, scale=1)
     
     trains1 = line1_inbound if current_direction == "Inbound" else line1_outbound
     if len(trains1) > 0:
         train = trains1[0]  # Show first train only
-        train_text = f"{train.route}, {train.direction}"
+        train_text = f"{train.route}"
         
         # Show alert icon if line has alerts
         if ENABLE_ALERT_ICONS and line1_has_alerts:
             display.set_pen(COLOR_RED)
-            display.text("!", 2, 10, scale=1)
+            display.text("!", 2, 8, scale=1)
             display.set_pen(COLOR_WHITE)
-            display.text(train_text, 10, 10, scale=1)
+            display.text(train_text, 10, 8, scale=1)
         else:
             display.set_pen(COLOR_WHITE)
-            display.text(train_text, 2, 10, scale=1)
+            display.text(train_text, 2, 8, scale=1)
         
         time_text = format_time(train.get_minutes())
         time_color = get_time_color(train.get_minutes())
         display.set_pen(time_color)
         time_x = 128 - (len(time_text) * 6) - 5
-        display.text(time_text, time_x, 10, scale=1)
+        display.text(time_text, time_x, 8, scale=1)
     else:
         display.set_pen(COLOR_WHITE)
-        display.text("No trains", 20, 10, scale=1)
+        display.text("No trains", 40, 8, scale=1)
     
-    # Divider line
+    # Divider line at y=16 (middle of 32px display)
     for x in range(0, 128, 4):
-        display.set_pen(line1_color)
-        display.pixel(x, 32)
+        display.set_pen(COLOR_WHITE)
+        display.pixel(x, 16)
     
-    # BOTTOM HALF - Line 2
+    # BOTTOM HALF - Line 2 (y=17 to y=31)
     line2_color = get_line_color(LINE_2)
     display.set_pen(line2_color)
-    display.text(LINE_2, 2, 34, scale=1)
+    display.text(LINE_2, 2, 17, scale=1)
     
     trains2 = line2_inbound if current_direction == "Inbound" else line2_outbound
     if len(trains2) > 0:
         train = trains2[0]  # Show first train only
-        train_text = f"{train.route}, {train.direction}"
+        train_text = f"{train.route}"
         
         # Show alert icon if line has alerts
         if ENABLE_ALERT_ICONS and line2_has_alerts:
             display.set_pen(COLOR_RED)
-            display.text("!", 2, 43, scale=1)
+            display.text("!", 2, 25, scale=1)
             display.set_pen(COLOR_WHITE)
-            display.text(train_text, 10, 43, scale=1)
+            display.text(train_text, 10, 25, scale=1)
         else:
             display.set_pen(COLOR_WHITE)
-            display.text(train_text, 2, 43, scale=1)
+            display.text(train_text, 2, 25, scale=1)
         
         time_text = format_time(train.get_minutes())
         time_color = get_time_color(train.get_minutes())
         display.set_pen(time_color)
         time_x = 128 - (len(time_text) * 6) - 5
-        display.text(time_text, time_x, 43, scale=1)
+        display.text(time_text, time_x, 25, scale=1)
     else:
         display.set_pen(COLOR_WHITE)
-        display.text("No trains", 20, 43, scale=1)
+        display.text("No trains", 40, 25, scale=1)
+    
+    i75.update()
 
 def format_time(minutes):
     """Format minutes into display string"""
@@ -1837,6 +1864,7 @@ def draw_alerts_screen():
     if len(active_alerts) == 0:
         display.set_pen(COLOR_WHITE)
         display.text("No active alerts", 10, 25, scale=1)
+        i75.update()
         return
     
     # Show first alert (could scroll through multiple)
@@ -1868,6 +1896,8 @@ def draw_alerts_screen():
         if len(desc) > 40:
             desc_line += "..."
         display.text(desc_line, 2, y, scale=1)
+    
+    i75.update()
 
 def draw_error_screen():
     """Display error messages when WiFi or API fails"""
@@ -1891,6 +1921,8 @@ def draw_error_screen():
         display.set_pen(COLOR_YELLOW)
         display.text("Check Token", 15, 40, scale=1)
         display.text("in config.py", 10, 50, scale=1)
+    
+    i75.update()
 
 # ===== MAIN LOOP =====
 async def main_loop():

@@ -459,6 +459,10 @@
                             <option value="2592000" ${c.check_update_interval==2592000?'selected':''}>Monthly</option>
                         </select>
                     </div>
+                    <button class="menu-item" onclick="TC.checkForUpdates()" style="margin-top:16px;justify-content:center;background:#6366f1;">
+                        <i data-lucide="download" style="width:18px;height:18px;margin-right:8px;"></i>
+                        <span id="update-btn-text">Check for Updates Now</span>
+                    </button>
                 </div>
             </div>
 
@@ -710,6 +714,33 @@
         } catch(e) { alert('Error: ' + e.message); }
     }
 
+    async function checkForUpdates() {
+        const btn = document.getElementById('update-btn-text');
+        const origText = btn.textContent;
+        btn.textContent = 'Checking...';
+        
+        try {
+            const res = await fetch('/check-update');
+            const data = await res.json();
+            
+            if (data.success) {
+                if (data.updated) {
+                    btn.textContent = 'Updated! Restart to apply';
+                    alert(data.message);
+                } else {
+                    btn.textContent = origText;
+                    alert(data.message);
+                }
+            } else {
+                btn.textContent = origText;
+                alert('Update check failed: ' + data.message);
+            }
+        } catch(e) {
+            btn.textContent = origText;
+            alert('Error checking for updates: ' + e.message);
+        }
+    }
+
     // Auto-update status every 5 seconds for live stats
     setInterval(updateStatus, 5000);
 
@@ -717,6 +748,6 @@
         nav, back, 
         toggleRotationMode, toggleSecondary, toggleSleep, updateTransitType,
         updateLine, updateStation, updateSecondaryLine, updateSecondaryStation,
-        updateStationLine, updateStationInfo, save 
+        updateStationLine, updateStationInfo, save, checkForUpdates 
     };
 })();

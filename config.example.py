@@ -99,6 +99,13 @@ STATION_ROTATION_TIME = 10  # Seconds per station (shows inbound + outbound befo
 # Note: Each direction still uses DISPLAY_ROTATION_TIME, this is the total time per station
 
 # ========================================
+# Timezone
+# ========================================
+UTC_OFFSET = -6  # Hours from UTC (e.g., -6 for CST, -5 for CDT)
+# Chicago: -6 (CST) or -5 (CDT during daylight saving time)
+# This affects sleep mode hours and the no-service hours detection
+
+# ========================================
 # Service Alerts
 # ========================================
 ENABLE_SERVICE_ALERTS = True  # Show service alerts in rotation
