@@ -19,6 +19,56 @@ try:
 except:
     pass
 
+# ===== FACTORY RESET CHECK =====
+# Hold B button during startup to delete config and enter setup mode
+SWITCH_B = 1
+
+def check_factory_reset():
+    """Check if B button is held to trigger factory reset"""
+    print("Checking for factory reset (hold B button)...")
+    try:
+        # Check if B button is pressed
+        if i75.switch_pressed(SWITCH_B):
+            print("B button detected! Hold for 10 seconds to reset...")
+            # Button pressed - flash LED purple to indicate reset
+            i75.set_led(100, 0, 100)  # Purple
+            
+            # Wait 10 seconds while button must stay held
+            start = time.ticks_ms()
+            while time.ticks_diff(time.ticks_ms(), start) < 10000:
+                if not i75.switch_pressed(SWITCH_B):
+                    # Button released early - cancel
+                    print("Factory reset cancelled - button released")
+                    i75.set_led(0, 100, 0)  # Back to green
+                    return False
+                time.sleep_ms(50)
+            
+            # Still held after 10 seconds - delete config
+            try:
+                os.remove('config.py')
+                print("Factory reset: config.py deleted!")
+                # Flash red to confirm
+                for _ in range(3):
+                    i75.set_led(100, 0, 0)
+                    time.sleep_ms(200)
+                    i75.set_led(0, 0, 0)
+                    time.sleep_ms(200)
+                return True
+            except OSError:
+                print("No config.py to delete")
+                return False
+        else:
+            print("B button not pressed, continuing normal boot")
+    except Exception as e:
+        print(f"Button check error: {e}")
+    return False
+
+# Run factory reset check at startup
+if check_factory_reset():
+    # Reset the board to enter setup portal
+    import machine
+    machine.reset()
+
 # ===== STATUS LED =====
 # Interstate 75 has an onboard RGB LED accessed via i75.set_led(r, g, b)
 # Controlled by ENABLE_STATUS_LED config option
@@ -28,6 +78,7 @@ def _led_enabled():
     try:
         return ENABLE_STATUS_LED
     except NameError:
+
         return True  # Default to enabled if config not loaded yet
 
 def led_on(r=50, g=50, b=50):
@@ -294,7 +345,7 @@ def connect_wifi(silent=False):
     Args:
         silent: If True, don't update display (for background reconnection)
     """
-    global wifi_connected, mdns_server, mdns_client
+    global wifi_connected, mdns_server, mdns_client, wifi_disconnect_start_ms
 
     wlan = network.WLAN(network.STA_IF)
     wlan.active(True)
@@ -311,6 +362,7 @@ def connect_wifi(silent=False):
     # Check if already connected
     if wlan.isconnected():
         wifi_connected = True
+        wifi_disconnect_start_ms = None
         if not silent:
             print(f"Already connected! IP: {wlan.ifconfig()[0]}")
 
@@ -382,6 +434,7 @@ def connect_wifi(silent=False):
         return False
     else:
         wifi_connected = True
+        wifi_disconnect_start_ms = None
         ip = wlan.ifconfig()[0]
         led_pattern_success()  # Success LED pattern
         print(f'Connected! IP: {ip}')
@@ -430,17 +483,22 @@ def connect_wifi(silent=False):
 def check_wifi_and_reconnect():
     """Check WiFi connection and attempt to reconnect if disconnected.
     Returns True if connected, False if reconnection failed."""
-    global wifi_connected
+    global wifi_connected, wifi_disconnect_start_ms
     
     wlan = network.WLAN(network.STA_IF)
     
     if wlan.isconnected():
+        wifi_disconnect_start_ms = None
         return True
     
     # WiFi disconnected - attempt to reconnect
     print("WiFi disconnected! Attempting to reconnect...")
     led_pattern_error()
     wifi_connected = False
+
+    # Start disconnect timer if not already started
+    if wifi_disconnect_start_ms is None:
+        wifi_disconnect_start_ms = time.ticks_ms()
     
     # Try to reconnect silently (don't update display during normal operation)
     for attempt in range(3):
@@ -451,6 +509,21 @@ def check_wifi_and_reconnect():
             return True
         time.sleep(2)
     
+    # Check if we've been offline for more than 60 seconds
+    try:
+        if wifi_disconnect_start_ms is not None:
+            elapsed_ms = time.ticks_diff(time.ticks_ms(), wifi_disconnect_start_ms)
+            if elapsed_ms >= 60000:
+                print("Offline for >60s. Entering WiFi setup portal...")
+                try:
+                    import setup_portal
+                    setup_portal.run_server()  # Blocks until config saved and device restarts
+                except Exception as e:
+                    print(f"Failed to start setup portal: {e}")
+                # If setup portal returns, continue returning False to skip network ops
+    except Exception as e:
+        print(f"Disconnect timer error: {e}")
+
     print("Failed to reconnect to WiFi after 3 attempts")
     return False
 
@@ -498,6 +571,7 @@ weather_data = {
 
 # Error states
 wifi_connected = False
+wifi_disconnect_start_ms = None  # Tracks when we first detected a disconnect
 api_error = False
 last_successful_update = 0
 cached_trains_available = False
@@ -1967,10 +2041,17 @@ async def main_loop():
     
     # Connect to WiFi
     if not connect_wifi():
-        # WiFi failed - show error and halt
-        draw_error_screen()
-        print("Cannot start without WiFi")
-        return
+        # WiFi failed - enter setup portal so user can fix credentials
+        print("Initial WiFi connect failed. Entering setup portal...")
+        try:
+            import setup_portal
+            setup_portal.run_server()  # Blocks until user saves config and device restarts
+        except Exception as e:
+            print(f"Setup portal failed to start: {e}")
+            # Show error screen and halt if portal cannot start
+            draw_error_screen()
+            print("Cannot start without WiFi")
+            return
     
     # Check for updates if enabled
     if ENABLE_AUTO_UPDATE:
