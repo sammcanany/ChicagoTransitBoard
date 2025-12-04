@@ -27,12 +27,12 @@
     const CTA_LINES = [
         {id: 'Red', name: 'Red Line'},
         {id: 'Blue', name: 'Blue Line'},
-        {id: 'Brown', name: 'Brown Line'},
-        {id: 'Green', name: 'Green Line'},
-        {id: 'Orange', name: 'Orange Line'},
+        {id: 'Brn', name: 'Brown Line'},
+        {id: 'G', name: 'Green Line'},
+        {id: 'Org', name: 'Orange Line'},
         {id: 'Pink', name: 'Pink Line'},
-        {id: 'Purple', name: 'Purple Line'},
-        {id: 'Yellow', name: 'Yellow Line'}
+        {id: 'P', name: 'Purple Line'},
+        {id: 'Y', name: 'Yellow Line'}
     ];
 
     const METRA_STATIONS = [
@@ -428,6 +428,30 @@
                     <div class="form-group"><label>Rotation Time (sec)</label><input type="number" id="rotation_time" min="1" max="30" value="${c.rotation_time||5}"></div>
                     <div class="form-group"><label>Update Interval (sec)</label><input type="number" id="update_interval" min="10" max="300" value="${c.update_interval||30}"></div>
                     <div class="form-group"><label>Trains to Show</label><input type="number" id="num_trains" min="1" max="8" value="${c.num_trains||4}"></div>
+                </div>
+                <div class="form-section">
+                    <div class="section-title">Text Colors</div>
+                    <div class="help-text" style="margin-bottom:12px;">Customize colors for different display elements</div>
+                    <div class="form-group">
+                        <label>Station Name</label>
+                        <input type="color" id="color_station_name" value="${c.color_station_name||'#FFFFFF'}" style="width:100%;height:40px;border:1px solid #333;border-radius:8px;cursor:pointer;">
+                        <div class="help-text">Color for station/line name at top</div>
+                    </div>
+                    <div class="form-group">
+                        <label>Direction (In/Out)</label>
+                        <input type="color" id="color_direction" value="${c.color_direction||'#FFFFFF'}" style="width:100%;height:40px;border:1px solid #333;border-radius:8px;cursor:pointer;">
+                        <div class="help-text">Color for inbound/outbound indicator</div>
+                    </div>
+                    <div class="form-group">
+                        <label>Train Info</label>
+                        <input type="color" id="color_train_info" value="${c.color_train_info||'#FFFFFF'}" style="width:100%;height:40px;border:1px solid #333;border-radius:8px;cursor:pointer;">
+                        <div class="help-text">Color for train route and details</div>
+                    </div>
+                    <div class="form-group">
+                        <label>Weather</label>
+                        <input type="color" id="color_weather" value="${c.color_weather||'#FFFFFF'}" style="width:100%;height:40px;border:1px solid #333;border-radius:8px;cursor:pointer;">
+                        <div class="help-text">Color for weather temperature text</div>
+                    </div>
                 </div>
             </div>
 

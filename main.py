@@ -5,6 +5,7 @@
 import time
 import network
 import os
+import sys
 from machine import WDT
 from interstate75 import Interstate75, DISPLAY_INTERSTATE75_128X32
 
@@ -254,6 +255,15 @@ try:
         from config import UTC_OFFSET
     except ImportError:
         UTC_OFFSET = -6  # Default to Chicago time (CST)
+    
+    # Display color settings
+    try:
+        from config import COLOR_STATION_NAME, COLOR_DIRECTION, COLOR_TRAIN_INFO, COLOR_WEATHER
+    except ImportError:
+        COLOR_STATION_NAME = "#FFFFFF"
+        COLOR_DIRECTION = "#FFFFFF"
+        COLOR_TRAIN_INFO = "#FFFFFF"
+        COLOR_WEATHER = "#FFFFFF"
         
 except ImportError:
     print("\n" + "="*50)
@@ -337,6 +347,48 @@ LINE_COLORS = {
 def get_line_color(line_code):
     """Get color for a specific line, default to Metra green"""
     return LINE_COLORS.get(line_code, COLOR_METRA_GREEN)
+
+def hex_to_pen(hex_color):
+    """Convert hex color (#RRGGBB) to display pen"""
+    try:
+        hex_color = hex_color.lstrip('#')
+        r = int(hex_color[0:2], 16)
+        g = int(hex_color[2:4], 16)
+        b = int(hex_color[4:6], 16)
+        return display.create_pen(r, g, b)
+    except:
+        return COLOR_WHITE  # Default to white if parsing fails
+
+def normalize_cta_line_name(route_code):
+    """Convert CTA route codes to full line names for display"""
+    # CTA API can return various formats - handle them all
+    # It might return: "Red", "Blue", "Brn", "G", "Org", "P", "Pink", "Y"
+    # or even numeric route IDs
+    
+    if not route_code:
+        return "Unknown"
+    
+    route_str = str(route_code).strip()
+    
+    # Map short codes and numeric IDs to display names
+    cta_name_map = {
+        # Short codes
+        "Brn": "Brown",
+        "G": "Green",
+        "Org": "Orange",
+        "P": "Purple",
+        "Y": "Yellow",
+        # Full names (pass through)
+        "Red": "Red",
+        "Blue": "Blue",
+        "Brown": "Brown",
+        "Green": "Green",
+        "Orange": "Orange",
+        "Purple": "Purple",
+        "Pink": "Pink",
+        "Yellow": "Yellow"
+    }
+    return cta_name_map.get(route_str, route_str)  # Return original if not in map
 
 # ===== WIFI CONNECTION =====
 def connect_wifi(silent=False):
@@ -1133,7 +1185,6 @@ def fetch_metra_trains(station_id, line_code):
         print(f"Found {len(trains_inbound)} inbound, {len(trains_outbound)} outbound Metra trains")
 
     except Exception as e:
-        import sys
         print(f"Error fetching Metra trains: {type(e).__name__}: {e}")
         sys.print_exception(e)
 
@@ -1143,6 +1194,11 @@ def fetch_cta_trains(station_id, line_code=None):
     """Fetch CTA train arrivals using Train Tracker API"""
     trains_inbound = []
     trains_outbound = []
+    
+    # Check if API key is set
+    if not CTA_API_KEY or CTA_API_KEY == "your_cta_key_here" or CTA_API_KEY == "":
+        print("CTA API key not configured - skipping fetch")
+        return trains_inbound, trains_outbound
     
     # Normalize CTA line name to API code
     line_map = {
@@ -1237,6 +1293,15 @@ def fetch_cta_trains(station_id, line_code=None):
                 # Get route and direction
                 route = arrival.get("rt", line_code or "Unknown")
                 destination = arrival.get("destNm", "")
+                
+                # Validate route - ensure it's not a station ID
+                if route and route.isdigit():
+                    print(f"Warning: Route appears to be numeric ({route}), using line_code instead")
+                    route = line_code or "Unknown"
+                
+                # Debug: print what we got from API
+                if not route or route == "Unknown":
+                    print(f"Warning: Missing route in CTA data. Station: {arrival.get('staNm')}, Dest: {destination}")
                 
                 # CTA uses direction codes in trDr field:
                 # 1 = South/West (toward terminals), 5 = North/East (toward Loop/downtown)
@@ -1358,6 +1423,7 @@ def fetch_trains():
     global api_error, last_successful_update, cached_trains_available, wifi_connected
     
     if not wifi_connected:
+        print("Skipping fetch_trains: WiFi not connected")
         return
     
     # Skip API calls during typical no-service hours (1:30 AM - 4:30 AM)
@@ -1400,24 +1466,43 @@ def fetch_trains():
         return
     
     try:
+        # Check if LINE_1 is properly configured
+        if not LINE_1 or LINE_1 == "" or LINE_1 == "None":
+            print("ERROR: LINE_1 not configured properly in config.py")
+            api_error = True
+            return
+        
+        if not PRIMARY_STATION_ID or PRIMARY_STATION_ID == "" or PRIMARY_STATION_ID == "None":
+            print("ERROR: PRIMARY_STATION_ID not configured properly in config.py")
+            api_error = True
+            return
         
         # Detect transit type for LINE_1
         line1_type = detect_transit_type(LINE_1)
+        print(f"LINE_1: {LINE_1}, Type: {line1_type}, Station: {PRIMARY_STATION_ID}")
         
         # Fetch LINE_1 data
         if line1_type == "cta":
-            line1_inbound, line1_outbound = fetch_cta_trains(PRIMARY_STATION_ID, LINE_1)
+            result = fetch_cta_trains(PRIMARY_STATION_ID, LINE_1)
+            line1_inbound = result[0]
+            line1_outbound = result[1]
         else:  # metra
-            line1_inbound, line1_outbound = fetch_metra_trains(PRIMARY_STATION_ID, LINE_1)
+            result = fetch_metra_trains(PRIMARY_STATION_ID, LINE_1)
+            line1_inbound = result[0]
+            line1_outbound = result[1]
         
         # Fetch LINE_2 data if dual line mode
         if dual_line_mode:
             line2_type = detect_transit_type(LINE_2)
             
             if line2_type == "cta":
-                line2_inbound, line2_outbound = fetch_cta_trains(SECONDARY_STATION_ID, LINE_2)
+                result = fetch_cta_trains(SECONDARY_STATION_ID, LINE_2)
+                line2_inbound = result[0]
+                line2_outbound = result[1]
             else:  # metra
-                line2_inbound, line2_outbound = fetch_metra_trains(SECONDARY_STATION_ID, LINE_2)
+                result = fetch_metra_trains(SECONDARY_STATION_ID, LINE_2)
+                line2_inbound = result[0]
+                line2_outbound = result[1]
                 
             # Update line numbers for line 2 trains
             for train in line2_inbound + line2_outbound:
@@ -1431,10 +1516,15 @@ def fetch_trains():
             api_error = False
             last_successful_update = time.time()
             cached_trains_available = True
+            print(f"Successfully fetched trains: {len(line1_inbound)} inbound, {len(line1_outbound)} outbound")
+        else:
+            print("Warning: No trains returned from API (could be valid if no trains scheduled)")
+            # Don't set api_error = True here - empty is valid during off-hours
 
     except Exception as e:
         api_error = True
         print(f"Error fetching trains: {e}")
+        sys.print_exception(e)
         # Keep cached data if available
         if not cached_trains_available:
             line1_inbound = []
@@ -1772,12 +1862,19 @@ def draw_display():
         draw_single_line_display()
     
     # Draw weather icon in top-right corner if enabled
+    # Position to the right of In/Out direction text
     if ENABLE_WEATHER and WEATHER_DISPLAY_MODE == "icon_only" and weather_data["temp"] is not None:
         draw_weather_icon(120, 2)
     elif ENABLE_WEATHER and WEATHER_DISPLAY_MODE == "icon_and_temp" and weather_data["temp"] is not None:
-        draw_weather_icon(115, 2)
-        display.set_pen(COLOR_WHITE)
-        display.text(f"{weather_data['temp']}", 100, 2, scale=1)
+        # Show temp to the right of "In"/"Out" text (which ends around x=115)
+        temp_pen = hex_to_pen(COLOR_WEATHER)
+        display.set_pen(temp_pen)
+        temp_text = f"{weather_data['temp']}"
+        # Position temp at x=108 (right after "In"/"Out" which is at x=100)
+        temp_x = 108
+        display.text(temp_text, temp_x, 2, scale=1)
+        # Icon after temp text
+        draw_weather_icon(temp_x + len(temp_text) * 6 + 1, 2)
     
     i75.update()
 
@@ -1803,11 +1900,13 @@ def draw_single_line_display():
         line_color = get_line_color(LINE_1)
     
     # Header - Station name with line color (smaller for 32px height)
-    display.set_pen(line_color)
+    station_pen = hex_to_pen(COLOR_STATION_NAME)
+    display.set_pen(station_pen)
     display.text(station_name, 2, 1, scale=1)
     
     # Direction indicator
-    display.set_pen(COLOR_WHITE)
+    direction_pen = hex_to_pen(COLOR_DIRECTION)
+    display.set_pen(direction_pen)
     dir_text = "In" if current_direction == "Inbound" else "Out"
     display.text(dir_text, 100, 1, scale=1)
     
@@ -1825,16 +1924,19 @@ def draw_single_line_display():
         y = y_start + (i * 10)
         
         # Format: "UP-N, Inbound" or "UP-N, Outbound"
-        train_text = f"{train.route}, {train.direction}"
+        # Normalize CTA line names (Brn -> Brown, G -> Green, etc.)
+        route_display = normalize_cta_line_name(train.route)
+        train_text = f"{route_display}, {train.direction}"
         
         # Show alert icon if this line has alerts
+        train_info_pen = hex_to_pen(COLOR_TRAIN_INFO)
         if ENABLE_ALERT_ICONS and line1_has_alerts:
             display.set_pen(COLOR_RED)
             display.text("!", 2, y, scale=1)
-            display.set_pen(COLOR_WHITE)
+            display.set_pen(train_info_pen)
             display.text(train_text, 10, y, scale=1)
         else:
-            display.set_pen(COLOR_WHITE)
+            display.set_pen(train_info_pen)
             display.text(train_text, 2, y, scale=1)
         
         # Time on the right
@@ -1850,21 +1952,26 @@ def draw_dual_line_display():
     # TOP HALF - Line 1 (y=0 to y=15)
     line1_color = get_line_color(LINE_1)
     display.set_pen(line1_color)
-    display.text(LINE_1, 2, 0, scale=1)
+    # Normalize line name for display (convert Brn -> Brown, etc.)
+    line1_display = normalize_cta_line_name(LINE_1)
+    display.text(line1_display, 2, 0, scale=1)
     
     trains1 = line1_inbound if current_direction == "Inbound" else line1_outbound
     if len(trains1) > 0:
         train = trains1[0]  # Show first train only
-        train_text = f"{train.route}"
+        # Normalize CTA line names
+        route_display = normalize_cta_line_name(train.route)
+        train_text = f"{route_display}"
         
         # Show alert icon if line has alerts
+        train_info_pen = hex_to_pen(COLOR_TRAIN_INFO)
         if ENABLE_ALERT_ICONS and line1_has_alerts:
             display.set_pen(COLOR_RED)
             display.text("!", 2, 8, scale=1)
-            display.set_pen(COLOR_WHITE)
+            display.set_pen(train_info_pen)
             display.text(train_text, 10, 8, scale=1)
         else:
-            display.set_pen(COLOR_WHITE)
+            display.set_pen(train_info_pen)
             display.text(train_text, 2, 8, scale=1)
         
         time_text = format_time(train.get_minutes())
@@ -1884,21 +1991,26 @@ def draw_dual_line_display():
     # BOTTOM HALF - Line 2 (y=17 to y=31)
     line2_color = get_line_color(LINE_2)
     display.set_pen(line2_color)
-    display.text(LINE_2, 2, 17, scale=1)
+    # Normalize line name for display (convert Brn -> Brown, etc.)
+    line2_display = normalize_cta_line_name(LINE_2)
+    display.text(line2_display, 2, 17, scale=1)
     
     trains2 = line2_inbound if current_direction == "Inbound" else line2_outbound
     if len(trains2) > 0:
         train = trains2[0]  # Show first train only
-        train_text = f"{train.route}"
+        # Normalize CTA line names
+        route_display = normalize_cta_line_name(train.route)
+        train_text = f"{route_display}"
         
         # Show alert icon if line has alerts
+        train_info_pen = hex_to_pen(COLOR_TRAIN_INFO)
         if ENABLE_ALERT_ICONS and line2_has_alerts:
             display.set_pen(COLOR_RED)
             display.text("!", 2, 25, scale=1)
-            display.set_pen(COLOR_WHITE)
+            display.set_pen(train_info_pen)
             display.text(train_text, 10, 25, scale=1)
         else:
-            display.set_pen(COLOR_WHITE)
+            display.set_pen(train_info_pen)
             display.text(train_text, 2, 25, scale=1)
         
         time_text = format_time(train.get_minutes())
@@ -2208,7 +2320,6 @@ async def main_loop():
                                 if config_portal.save_config(params):
                                     cl.send('HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n{"success":true}')
                                     cl.close()
-                                    import sys
                                     sys.exit()
                                 else:
                                     cl.send('HTTP/1.1 500 Error\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n{"success":false}')

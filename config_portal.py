@@ -89,6 +89,11 @@ def get_current_config():
             'sleep_brightness': getattr(config, 'SLEEP_BRIGHTNESS', 0.1),
             'enable_adaptive_brightness': getattr(config, 'ENABLE_ADAPTIVE_BRIGHTNESS', False),
             'rotation_mode': getattr(config, 'ROTATION_MODE', 'direction'),
+            # Color settings
+            'color_station_name': getattr(config, 'COLOR_STATION_NAME', '#FFFFFF'),
+            'color_direction': getattr(config, 'COLOR_DIRECTION', '#FFFFFF'),
+            'color_train_info': getattr(config, 'COLOR_TRAIN_INFO', '#FFFFFF'),
+            'color_weather': getattr(config, 'COLOR_WEATHER', '#FFFFFF'),
         }
         
         # Extract station rotation data if available
@@ -147,6 +152,11 @@ def get_current_config():
             'station2_line_id': '',
             'station3_station_id': '',
             'station3_line_id': '',
+            # Color settings
+            'color_station_name': '#FFFFFF',
+            'color_direction': '#FFFFFF',
+            'color_train_info': '#FFFFFF',
+            'color_weather': '#FFFFFF',
         }
 
 def get_system_status():
@@ -277,7 +287,8 @@ PRIMARY_STATION_ID = "{params.get('station_id', params.get('primary_station_id',
 LINE_1 = "{params.get('line_id', params.get('line_name', ''))}"  # Primary line
 """
 
-    if enable_secondary and params.get('secondary_line_id'):
+    # Only enable secondary if we have actual line data
+    if enable_secondary and params.get('secondary_line_id') and params.get('secondary_line_id') != 'None':
         config_content += f"""
 # Secondary Line (Dual Line Mode)
 LINE_2 = "{params.get('secondary_line_id', '')}"
@@ -359,6 +370,12 @@ SLEEP_END_HOUR = {params.get('sleep_end_hour', params.get('sleep-end-hour', '5')
 SLEEP_BRIGHTNESS = {params.get('sleep_brightness', params.get('sleep-brightness', '0.1'))}
 
 ENABLE_ADAPTIVE_BRIGHTNESS = {enable_adaptive_brightness}
+
+# Display Colors (Hex format: #RRGGBB)
+COLOR_STATION_NAME = "{params.get('color_station_name', '#FFFFFF')}"
+COLOR_DIRECTION = "{params.get('color_direction', '#FFFFFF')}"
+COLOR_TRAIN_INFO = "{params.get('color_train_info', '#FFFFFF')}"
+COLOR_WEATHER = "{params.get('color_weather', '#FFFFFF')}"
 """
 
     try:
